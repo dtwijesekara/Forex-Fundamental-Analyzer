@@ -4,21 +4,24 @@
 
 ```
 GitHub repo
-  ├── Vercel (dashboard + lightweight crons)   — FREE
+  ├── Vercel (dashboard only)        — FREE
   │     ├── Next.js dashboard (all 5 pages)
-  │     ├── API routes
-  │     └── Cron: news (20m), intermarket (10m), alerts (15m)
+  │     └── API routes (read-only, served on demand)
   │
-  └── Railway (background worker)              — FREE 500h/mo
-        └── node-cron scheduler → full analysis every 30 min
-              ├── Forex Factory calendar fetch
-              ├── Event scoring
-              ├── Currency + pair scoring
-              ├── Regime detection
-              └── Telegram alerts
+  └── Railway (ALL scheduling)       — FREE 500h/mo
+        └── node-cron scheduler
+              ├── Full analysis every 30 min
+              ├── Alert checks every 15 min
+              ├── Intermarket refresh every 10 min
+              └── News fetch every 20 min
 
 Both services read/write the same Supabase database.
 ```
+
+> **Why no Vercel cron jobs?**
+> Vercel Hobby (free) only allows crons that run **once per day**. Our jobs need to run
+> every 10–30 minutes — that requires Vercel Pro ($20/month). Railway handles all
+> scheduling for free, so `vercel.json` has no crons on the free tier.
 
 > **Why NOT Cloudflare Pages?**
 > This project uses `yahoo-finance2`, `node-cron`, and `node-telegram-bot-api` — all rely
@@ -181,10 +184,20 @@ Or edit directly in Supabase dashboard → Table Editor → `central_bank_bias`.
 | **Total** | | **$0–$5/month** |
 
 ### Vercel Pro upgrade ($20/month) — when you need it
-If you want the full analysis cron running on Vercel (instead of Railway):
-1. Add back to `vercel.json`: `{ "path": "/api/cron/analysis", "schedule": "*/30 * * * *" }`
-2. In `src/app/api/cron/analysis/route.ts` — the `maxDuration: 300` will work on Pro
-3. Cancel Railway — Vercel handles everything
+If you want to drop Railway and run everything on Vercel:
+1. Upgrade to Vercel Pro
+2. Replace `vercel.json` with:
+```json
+{
+  "crons": [
+    { "path": "/api/cron/analysis",   "schedule": "*/30 * * * *" },
+    { "path": "/api/cron/alerts",     "schedule": "*/15 * * * *" },
+    { "path": "/api/cron/intermarket","schedule": "*/10 * * * *" },
+    { "path": "/api/cron/news",       "schedule": "*/20 * * * *" }
+  ]
+}
+```
+3. Cancel Railway — Vercel handles all scheduling natively
 
 ---
 
@@ -194,12 +207,12 @@ If you want the full analysis cron running on Vercel (instead of Railway):
 → Trigger a manual refresh (Step 4). Railway worker may not have run yet.
 
 **Railway worker crashes:**
-→ Check Variables tab — all 3 Supabase vars must be set.
-→ View logs for the specific error message.
+→ Check Variables tab — all Supabase vars must be set.
+→ Railway → Deployments → View Logs to see the specific error.
 
 **Vercel build fails:**
 → Check all `NEXT_PUBLIC_*` env vars are set in Vercel → Settings → Environment Variables.
+→ Redeploy after adding vars.
 
-**Cron jobs not running:**
-→ Vercel crons only run on Production deployments (not Preview). Make sure you're looking at the production URL.
-→ Vercel dashboard → Logs → Cron tab shows execution history.
+**"Hobby accounts are limited to daily cron jobs" error on Vercel:**
+→ This is expected — `vercel.json` is now empty (`{}`). Railway handles all cron scheduling.
