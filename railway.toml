@@ -6,6 +6,9 @@
 builder = "NIXPACKS"
 buildCommand = "npm install"
 
+[build.nixpacksPlan.variables]
+NODE_VERSION = "20"
+
 [deploy]
 startCommand = "npm run worker:start"
 restartPolicyType = "ON_FAILURE"
