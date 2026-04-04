@@ -4,13 +4,24 @@
 // Provides currency-specific intermarket score contribution
 // ============================================================
 
-import yahooFinance from 'yahoo-finance2';
 import { createAdminClient, TABLES } from '@/lib/supabase';
 
-// Wrapper to bypass yahoo-finance2 TypeScript overload complexity
+// yahoo-finance2 is ESM-only — use dynamic import so it works in both
+// Next.js (serverExternalPackages) and the tsx CJS worker on Railway.
+// We cache the module after first load to avoid repeated dynamic imports.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _yf: any = null;
+async function getYF() {
+  if (!_yf) {
+    const m = await import('yahoo-finance2');
+    _yf = m.default ?? m;
+  }
+  return _yf;
+}
+
 async function fetchQuote(symbol: string): Promise<{ regularMarketPrice?: number | null; regularMarketChangePercent?: number | null } | null> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (yahooFinance as any).quote(symbol);
+  const yf = await getYF();
+  return yf.quote(symbol);
 }
 import { INTERMARKET_SYMBOLS } from '@/lib/constants';
 import type { Currency, IntermarketData, IntermarketSnapshot, MarketSymbol } from '@/types';
