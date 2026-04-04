@@ -4,7 +4,6 @@
 // Or called by the scheduler every cycle
 // ============================================================
 
-import 'dotenv/config';
 import { collectCalendarEvents } from '../src/engines/calendar/collector';
 import { parseAndScoreRecentReleases } from '../src/engines/calendar/parser';
 import { fetchAndStoreIntermarketData } from '../src/engines/intermarket/confirmation';

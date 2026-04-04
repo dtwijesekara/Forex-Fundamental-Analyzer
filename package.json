@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "worker:run": "tsx workers/run-analysis.ts",
+    "worker:run": "tsx --env-file=.env.local workers/run-analysis.ts",
     "worker:start": "tsx workers/scheduler.ts"
   },
   "dependencies": {

@@ -5,7 +5,6 @@
 // Deploy on: Railway / Render / VPS (NOT Vercel — no long-running processes)
 // ============================================================
 
-import 'dotenv/config';
 import cron from 'node-cron';
 import { collectCalendarEvents } from '../src/engines/calendar/collector';
 import { parseAndScoreRecentReleases } from '../src/engines/calendar/parser';
