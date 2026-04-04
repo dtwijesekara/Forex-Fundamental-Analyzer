@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   FOREX FUNDAMENTAL ANALYZER — Global Styles
+   Futuristic dark theme
+   ============================================================ */
+
+:root {
+  --bg-primary:   #0a0a0f;
+  --bg-secondary: #0f0f17;
+  --bg-card:      #13131d;
+  --border:       rgba(255,255,255,0.06);
+  --accent:       #10b981;
+}
+
+html { color-scheme: dark; }
+
+body {
+  background-color: var(--bg-primary);
+  color: #e2e8f0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Subtle dot-grid background */
+  background-image: radial-gradient(rgba(255,255,255,0.025) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────── */
+::-webkit-scrollbar          { width: 3px; height: 3px; }
+::-webkit-scrollbar-track    { background: transparent; }
+::-webkit-scrollbar-thumb    { background: rgba(148,163,184,0.12); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,0.22); }
+
+/* ── Typography helpers ─────────────────────────────────── */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* ── Gradient text ──────────────────────────────────────── */
+.gradient-text {
+  background: linear-gradient(135deg, #e2e8f0 0%, #94a3b8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.gradient-text-green {
+  background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Glow effects ───────────────────────────────────────── */
+.glow-green  { box-shadow: 0 0 24px rgba(16,185,129,0.12), 0 0 48px rgba(16,185,129,0.05); }
+.glow-red    { box-shadow: 0 0 24px rgba(239,68,68,0.12),  0 0 48px rgba(239,68,68,0.05);  }
+.glow-amber  { box-shadow: 0 0 24px rgba(245,158,11,0.12), 0 0 48px rgba(245,158,11,0.05); }
+
+/* ── Card glass effect ──────────────────────────────────── */
+.glass-card {
+  background: rgba(19, 19, 29, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.02),
+    0 4px 32px rgba(0,0,0,0.45),
+    inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+/* ── Stat card gradient backgrounds ────────────────────── */
+.stat-card-green  { background: linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(5,150,105,0.03) 100%);  border: 1px solid rgba(16,185,129,0.18); }
+.stat-card-red    { background: linear-gradient(135deg, rgba(239,68,68,0.08) 0%, rgba(220,38,38,0.03) 100%);   border: 1px solid rgba(239,68,68,0.18); }
+.stat-card-purple { background: linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(109,40,217,0.03) 100%); border: 1px solid rgba(139,92,246,0.18); }
+.stat-card-amber  { background: linear-gradient(135deg, rgba(245,158,11,0.08) 0%, rgba(217,119,6,0.03) 100%);  border: 1px solid rgba(245,158,11,0.18); }
+
+/* ── Loading skeleton ───────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -400% 0; }
+  100% { background-position: 400% 0; }
+}
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.03) 25%,
+    rgba(255,255,255,0.06) 50%,
+    rgba(255,255,255,0.03) 75%
+  );
+  background-size: 400% 100%;
+  animation: shimmer 1.8s infinite;
+  border-radius: 4px;
+}
+
+/* ── Page fade-in ───────────────────────────────────────── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+.animate-fadeInUp { animation: fadeInUp 0.3s ease forwards; }
+
+/* ── Hide scrollbar ─────────────────────────────────────── */
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }

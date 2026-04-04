@@ -1,0 +1,12 @@
+# Railway deployment config — runs the background scheduler worker
+# The worker handles all cron scheduling (analysis, alerts, intermarket, news)
+# The Next.js dashboard is deployed separately on Vercel
+
+[build]
+builder = "NIXPACKS"
+buildCommand = "npm install"
+
+[deploy]
+startCommand = "npm run worker:start"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
