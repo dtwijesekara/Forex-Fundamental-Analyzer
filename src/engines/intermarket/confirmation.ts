@@ -6,22 +6,52 @@
 
 import { createAdminClient, TABLES } from '@/lib/supabase';
 
-// yahoo-finance2 is ESM-only — use dynamic import so it works in both
-// Next.js (serverExternalPackages) and the tsx CJS worker on Railway.
-// We cache the module after first load to avoid repeated dynamic imports.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _yf: any = null;
-async function getYF() {
-  if (!_yf) {
-    const m = await import('yahoo-finance2');
-    _yf = m.default ?? m;
-  }
-  return _yf;
-}
+// ── Stooq.com market data (free, no auth, reliable) ──────────────────────
+// Returns CSV: Symbol,Date,Time,Open,High,Low,Close,Volume
+// Change% is approximated from open→close of latest bar.
+//
+// Stooq symbols confirmed working (tested 2026-04):
+const STOOQ_MAP: Record<string, { symbol: string; invertDirection?: boolean }> = {
+  'DX-Y.NYB': { symbol: 'dx.f'  },         // Dollar index futures
+  'GC=F':     { symbol: 'gc.f'  },         // Gold futures
+  'CL=F':     { symbol: 'cl.f'  },         // WTI Oil futures
+  '^GSPC':    { symbol: '^spx'  },         // S&P 500
+  '^VIX':     { symbol: 'vx.f'  },         // VIX futures (proxy for spot VIX)
+  // US 10Y: ZN futures (bond price) — rises when yields FALL → invert direction
+  '^TNX':     { symbol: 'zn.f', invertDirection: true },
+};
 
-async function fetchQuote(symbol: string): Promise<{ regularMarketPrice?: number | null; regularMarketChangePercent?: number | null } | null> {
-  const yf = await getYF();
-  return yf.quote(symbol);
+async function fetchQuote(yahooSymbol: string): Promise<{
+  regularMarketPrice?: number | null;
+  regularMarketChangePercent?: number | null;
+} | null> {
+  const cfg = STOOQ_MAP[yahooSymbol];
+  if (!cfg) return null;
+
+  const url = `https://stooq.com/q/l/?s=${encodeURIComponent(cfg.symbol)}&f=sd2t2ohlcv&h&e=csv`;
+  const res  = await fetch(url, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; FXAnalyzer/1.0)' },
+  });
+  if (!res.ok) return null;
+
+  const text  = await res.text();
+  const lines = text.trim().split('\n');
+  if (lines.length < 2) return null;
+
+  const parts     = lines[1].split(',');
+  const close     = parseFloat(parts[6]);
+  const open      = parseFloat(parts[3]);
+
+  if (isNaN(close) || !isFinite(close)) return null;
+
+  let changePercent = open > 0 ? ((close - open) / open) * 100 : 0;
+  // Bond price moves inverse to yield — flip sign for TNX equivalent
+  if (cfg.invertDirection) changePercent = -changePercent;
+
+  return {
+    regularMarketPrice:         close,
+    regularMarketChangePercent: Number(changePercent.toFixed(3)),
+  };
 }
 import { INTERMARKET_SYMBOLS } from '@/lib/constants';
 import type { Currency, IntermarketData, IntermarketSnapshot, MarketSymbol } from '@/types';
