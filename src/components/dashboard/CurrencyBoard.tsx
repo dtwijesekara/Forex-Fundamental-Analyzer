@@ -248,9 +248,10 @@ function CurrencyRow({
 
 // ── MINI SCORE CHIP (collapsed view) ─────────────────────────
 function MiniScore({ label, value, max }: { label: string; value: number; max: number }) {
-  const isPositive = value > 0;
-  const isNegative = value < 0;
-  const pct = Math.min(Math.abs(value) / max, 1);
+  const v        = value ?? 0;
+  const isPositive = v > 0;
+  const isNegative = v < 0;
+  const pct = Math.min(Math.abs(v) / max, 1);
   const intensity = pct > 0.6 ? 'strong' : pct > 0.3 ? 'mid' : 'weak';
 
   const color =
@@ -266,7 +267,7 @@ function MiniScore({ label, value, max }: { label: string; value: number; max: n
     <div className="text-[9px] text-slate-600">
       {label}:{' '}
       <span className={cn('font-bold', color)}>
-        {value > 0 ? '+' : ''}{value.toFixed(0)}
+        {(value ?? 0) > 0 ? '+' : ''}{(value ?? 0).toFixed(0)}
       </span>
     </div>
   );
@@ -281,8 +282,9 @@ function BreakdownBar({
   range: number;
   isNegativeOnly?: boolean;
 }) {
-  const pct = Math.min(Math.abs(value) / range, 1) * 100;
-  const isPos = value >= 0;
+  const v   = value ?? 0;
+  const pct = Math.min(Math.abs(v) / range, 1) * 100;
+  const isPos = v >= 0;
 
   const barColor = isNegativeOnly
     ? 'bg-amber-500'
@@ -302,7 +304,7 @@ function BreakdownBar({
         />
       </div>
       <span className={cn('text-[10px] font-bold tabular-nums w-8 text-right', textColor)}>
-        {value > 0 ? '+' : ''}{value.toFixed(0)}
+        {(value ?? 0) > 0 ? '+' : ''}{(value ?? 0).toFixed(0)}
       </span>
     </div>
   );

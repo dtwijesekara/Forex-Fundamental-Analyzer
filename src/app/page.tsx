@@ -253,7 +253,7 @@ export default function OverviewPage() {
                     </div>
                     <div className="text-right shrink-0">
                       <div className={`text-sm font-bold tabular ${getPairBiasColor(pair.bias)}`}>
-                        {pair.pair_score > 0 ? '+' : ''}{pair.pair_score.toFixed(0)}
+                        {(pair.pair_score ?? 0) > 0 ? '+' : ''}{(pair.pair_score ?? 0).toFixed(0)}
                       </div>
                       <div className="text-[10px] text-slate-500">{pair.conviction_pct}%</div>
                     </div>

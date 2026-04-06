@@ -50,7 +50,7 @@ export default function PairsPage() {
   const sorted = useMemo(() => {
     return [...rawPairs].sort((a, b) => {
       if (sortBy === 'conviction') return b.conviction_pct - a.conviction_pct;
-      if (sortBy === 'score')      return Math.abs(b.pair_score) - Math.abs(a.pair_score);
+      if (sortBy === 'score')      return Math.abs(b.pair_score ?? 0) - Math.abs(a.pair_score ?? 0);
       return a.pair.localeCompare(b.pair);
     });
   }, [rawPairs, sortBy]);
@@ -353,7 +353,7 @@ function PairCard({ pair }: { pair: PairBiasResult }) {
         <div className="flex items-end justify-between mb-2.5">
           <div>
             <span className={cn('text-xl font-black tabular-nums', biasColor)}>
-              {pair.pair_score > 0 ? '+' : ''}{pair.pair_score.toFixed(0)}
+              {(pair.pair_score ?? 0) > 0 ? '+' : ''}{(pair.pair_score ?? 0).toFixed(0)}
             </span>
             <span className="text-[10px] text-slate-600 ml-1">pts</span>
           </div>
@@ -379,9 +379,9 @@ function PairCard({ pair }: { pair: PairBiasResult }) {
             <span className="text-slate-600 font-mono">{pair.base_currency}</span>
             <span className={cn(
               'font-bold',
-              pair.base_score > 0 ? 'text-emerald-400' : pair.base_score < 0 ? 'text-red-400' : 'text-slate-500'
+              (pair.base_score ?? 0) > 0 ? 'text-emerald-400' : (pair.base_score ?? 0) < 0 ? 'text-red-400' : 'text-slate-500'
             )}>
-              {pair.base_score > 0 ? '+' : ''}{pair.base_score.toFixed(0)}
+              {(pair.base_score ?? 0) > 0 ? '+' : ''}{(pair.base_score ?? 0).toFixed(0)}
             </span>
           </div>
           <span className="text-slate-700">vs</span>
@@ -389,20 +389,20 @@ function PairCard({ pair }: { pair: PairBiasResult }) {
             <span className="text-slate-600 font-mono">{pair.quote_currency}</span>
             <span className={cn(
               'font-bold',
-              pair.quote_score > 0 ? 'text-emerald-400' : pair.quote_score < 0 ? 'text-red-400' : 'text-slate-500'
+              (pair.quote_score ?? 0) > 0 ? 'text-emerald-400' : (pair.quote_score ?? 0) < 0 ? 'text-red-400' : 'text-slate-500'
             )}>
-              {pair.quote_score > 0 ? '+' : ''}{pair.quote_score.toFixed(0)}
+              {(pair.quote_score ?? 0) > 0 ? '+' : ''}{(pair.quote_score ?? 0).toFixed(0)}
             </span>
           </div>
           <div className="flex-1" />
           {/* Spread indicator */}
           <span className={cn(
             'text-[9px] font-mono font-bold px-1.5 py-0.5 rounded',
-            Math.abs(pair.pair_score) >= 60 ? 'text-emerald-300 bg-emerald-500/10'
-              : Math.abs(pair.pair_score) >= 30 ? 'text-amber-300 bg-amber-500/10'
+            Math.abs(pair.pair_score ?? 0) >= 60 ? 'text-emerald-300 bg-emerald-500/10'
+              : Math.abs(pair.pair_score ?? 0) >= 30 ? 'text-amber-300 bg-amber-500/10'
               : 'text-slate-600 bg-slate-800/50'
           )}>
-            Δ{Math.abs(pair.pair_score).toFixed(0)}
+            Δ{Math.abs(pair.pair_score ?? 0).toFixed(0)}
           </span>
         </div>
 
