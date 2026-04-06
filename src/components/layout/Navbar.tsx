@@ -1,18 +1,19 @@
 'use client';
 
 // ============================================================
-// NAVBAR — Persistent navigation for all pages
-// Desktop: sticky top bar with logo + tabs + live dot
-// Mobile: compact top bar + horizontal scrollable tabs
+// NAVBAR — persistent navigation + live system health dot
+// Desktop: sticky top bar · Mobile: compact + horizontal tabs
 // ============================================================
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useState, useEffect } from 'react';
 import {
   Activity, LayoutDashboard, BarChart2,
-  ArrowLeftRight, CalendarDays, TrendingUp, RefreshCw, Clock,
+  ArrowLeftRight, CalendarDays, TrendingUp, RefreshCw,
 } from 'lucide-react';
-import { cn, formatTimeAgo } from '@/lib/utils';
+import { cn } from '@/lib/utils';
+import type { HealthStatus } from '@/app/api/system/health/route';
 
 export interface NavbarProps {
   lastFetch?: string | null;
@@ -28,19 +29,43 @@ const NAV_ITEMS = [
   { href: '/markets',    label: 'Markets',    icon: TrendingUp },
 ];
 
+const HEALTH_CONFIG: Record<HealthStatus, { dot: string; label: string; pulse: boolean }> = {
+  healthy: { dot: 'bg-emerald-400', label: 'Live',    pulse: true  },
+  aging:   { dot: 'bg-amber-400',  label: 'Aging',   pulse: false },
+  stale:   { dot: 'bg-rose-400',   label: 'Stale',   pulse: false },
+  offline: { dot: 'bg-slate-600',  label: 'Offline', pulse: false },
+};
+
 export function Navbar({ lastFetch, refreshing, onRefresh }: NavbarProps) {
   const pathname = usePathname();
+  const [health, setHealth] = useState<HealthStatus>('healthy');
+
+  // Poll system health every 90s
+  useEffect(() => {
+    const fetchHealth = async () => {
+      try {
+        const res  = await fetch('/api/system/health', { cache: 'no-store' });
+        const json = await res.json();
+        if (json.success) setHealth(json.data.status as HealthStatus);
+      } catch { /* keep previous */ }
+    };
+    fetchHealth();
+    const t = setInterval(fetchHealth, 90_000);
+    return () => clearInterval(t);
+  }, []);
 
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname.startsWith(href);
 
+  const hc = HEALTH_CONFIG[health];
+
   return (
     <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#0a0a0f]/95 backdrop-blur-xl">
-      {/* ── Accent line at very top ── */}
+      {/* Accent line */}
       <div className="h-[2px] bg-gradient-to-r from-transparent via-emerald-500/60 to-transparent" />
 
-      {/* ── Main bar ── */}
-      <div className="max-w-screen-2xl mx-auto px-4 h-13 flex items-center justify-between gap-4 py-2.5">
+      {/* Main bar */}
+      <div className="max-w-screen-2xl mx-auto px-4 flex items-center justify-between gap-4 py-2.5">
 
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5 shrink-0 group">
@@ -53,7 +78,7 @@ export function Navbar({ lastFetch, refreshing, onRefresh }: NavbarProps) {
           </div>
         </Link>
 
-        {/* Desktop nav tabs — centered */}
+        {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-0.5 flex-1 justify-center">
           {NAV_ITEMS.map(({ href, label, icon: Icon, exact }) => {
             const active = isActive(href, exact);
@@ -75,15 +100,8 @@ export function Navbar({ lastFetch, refreshing, onRefresh }: NavbarProps) {
           })}
         </nav>
 
-        {/* Right side: time + refresh + live */}
+        {/* Right: health + refresh */}
         <div className="flex items-center gap-2.5 shrink-0">
-          {lastFetch && (
-            <div className="hidden lg:flex items-center gap-1.5 text-[10px] text-slate-600">
-              <Clock size={9} />
-              <span>{formatTimeAgo(lastFetch)}</span>
-            </div>
-          )}
-
           {onRefresh && (
             <button
               onClick={onRefresh}
@@ -93,22 +111,42 @@ export function Navbar({ lastFetch, refreshing, onRefresh }: NavbarProps) {
                 'w-7 h-7 rounded-lg flex items-center justify-center',
                 'border border-slate-700/60 bg-slate-800/50 text-slate-400',
                 'hover:bg-slate-700/60 hover:text-slate-200 hover:border-slate-600/60',
-                'disabled:opacity-40 disabled:cursor-not-allowed',
-                'transition-all duration-150'
+                'disabled:opacity-40 disabled:cursor-not-allowed transition-all',
               )}
             >
               <RefreshCw size={11} className={cn(refreshing && 'animate-spin')} />
             </button>
           )}
 
-          <div className="flex items-center gap-1.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="hidden sm:block text-[9px] text-emerald-400/60 font-semibold tracking-widest uppercase">Live</span>
-          </div>
+          {/* System health indicator */}
+          <Link
+            href="/markets"
+            title={`System: ${health}`}
+            className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-white/[0.04] transition-colors"
+          >
+            <div className="relative">
+              <span className={cn('w-1.5 h-1.5 rounded-full block', hc.dot)} />
+              {hc.pulse && (
+                <span className={cn(
+                  'absolute inset-0 rounded-full animate-ping opacity-75',
+                  hc.dot
+                )} />
+              )}
+            </div>
+            <span className={cn(
+              'hidden sm:block text-[9px] font-semibold tracking-widest uppercase',
+              health === 'healthy' ? 'text-emerald-400/60'
+                : health === 'aging' ? 'text-amber-400/70'
+                : health === 'stale' ? 'text-rose-400/70'
+                : 'text-slate-600'
+            )}>
+              {hc.label}
+            </span>
+          </Link>
         </div>
       </div>
 
-      {/* ── Mobile horizontal tabs ── */}
+      {/* Mobile horizontal tabs */}
       <div className="md:hidden flex items-center gap-0.5 px-3 pb-2.5 overflow-x-auto scrollbar-none">
         {NAV_ITEMS.map(({ href, label, icon: Icon, exact }) => {
           const active = isActive(href, exact);
