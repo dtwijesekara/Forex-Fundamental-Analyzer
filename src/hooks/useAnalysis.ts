@@ -45,7 +45,7 @@ export function useAnalysis(): AnalysisState {
 
   // ── Fetch from API ─────────────────────────────────────────
   const fetchData = useCallback(async (isBackground = false) => {
-    if (!isBackground) setLoading(prev => prev);
+    if (!isBackground) setLoading(true);
     try {
       const res  = await fetch('/api/analysis', { cache: 'no-store' });
       const json = await res.json();

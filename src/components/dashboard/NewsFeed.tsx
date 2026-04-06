@@ -16,10 +16,12 @@ import {
 import type { NewsItem } from '@/engines/news/collector';
 
 const SOURCE_LABELS: Record<string, string> = {
-  forexlive:    'ForexLive',
-  fxstreet:     'FXStreet',
-  dailyfx:      'DailyFX',
-  reuters_forex: 'Reuters',
+  forexlive:       'ForexLive',
+  fxstreet:        'FXStreet',
+  dailyfx:         'DailyFX',
+  reuters_forex:   'Reuters',
+  investing_forex: 'Investing.com',
+  marketwatch:     'MarketWatch',
 };
 
 const CURRENCY_LIST = ['ALL', 'USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'NZD', 'CHF'];

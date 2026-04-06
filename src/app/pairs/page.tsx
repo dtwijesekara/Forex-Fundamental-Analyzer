@@ -42,11 +42,9 @@ export default function PairsPage() {
   const [sortBy, setSortBy] = useState<SortKey>('conviction');
   const [showSortMenu, setShowSortMenu] = useState(false);
 
-  if (loading && !data) return <PageShell><PageSkeleton /></PageShell>;
-
   const rawPairs = data?.pairs ?? [];
 
-  // Sort first, then filter
+  // Sort first, then filter — hooks MUST be before any conditional return
   const sorted = useMemo(() => {
     return [...rawPairs].sort((a, b) => {
       if (sortBy === 'conviction') return b.conviction_pct - a.conviction_pct;
@@ -66,6 +64,8 @@ export default function PairsPage() {
       default:                return sorted;
     }
   }, [sorted, activeFilter]);
+
+  if (loading && !data) return <PageShell><PageSkeleton /></PageShell>;
 
   // Stats
   const bullishCount    = rawPairs.filter(p => p.bias === 'bullish').length;

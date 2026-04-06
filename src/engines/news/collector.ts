@@ -7,7 +7,13 @@
 import Parser from 'rss-parser';
 import { createAdminClient } from '@/lib/supabase';
 
-const rssParser = new Parser({ timeout: 10000 });
+const rssParser = new Parser({
+  timeout: 12000,
+  headers: {
+    'User-Agent': 'Mozilla/5.0 (compatible; ForexFundamentalAnalyzer/1.0; +https://github.com/forex-analyzer)',
+    'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+  },
+});
 
 // ─────────────────────────────────────────────────────────────
 // RSS FEED SOURCES
@@ -19,19 +25,19 @@ const RSS_FEEDS = [
     impact: 'high' as const,
   },
   {
-    source: 'dailyfx',
-    url: 'https://www.dailyfx.com/feeds/all',
-    impact: 'medium' as const,
-  },
-  {
     source: 'fxstreet',
     url: 'https://www.fxstreet.com/rss/news',
     impact: 'medium' as const,
   },
   {
-    source: 'reuters_forex',
-    url: 'https://feeds.reuters.com/reuters/businessNews',
-    impact: 'high' as const,
+    source: 'investing_forex',
+    url: 'https://www.investing.com/rss/news_301.rss',
+    impact: 'medium' as const,
+  },
+  {
+    source: 'marketwatch',
+    url: 'https://feeds.content.dowjones.io/public/rss/mw_realtimeheadlines',
+    impact: 'medium' as const,
   },
 ];
 

@@ -14,6 +14,7 @@ import { scoreAllPairs } from '../src/engines/scoring/pair-scorer';
 import { detectAndStoreRegime } from '../src/engines/regime/detector';
 import { runAlertCheck } from '../src/engines/alerts/alert-engine';
 import { generateEventRiskWarnings } from '../src/engines/risk/event-risk';
+import { collectForexNews } from '../src/engines/news/collector';
 
 // ─────────────────────────────────────────────────────────────
 // SCHEDULE CONFIGURATION
@@ -31,6 +32,9 @@ const SCHEDULE = {
 
   // Intermarket data: every 10 minutes (markets move fast)
   INTERMARKET: '*/10 * * * *',
+
+  // Forex news collection: every 20 minutes
+  NEWS: process.env.WORKER_CRON_NEWS || '*/20 * * * *',
 };
 
 let isAnalysisRunning = false;
@@ -101,6 +105,16 @@ async function intermarketJob(): Promise<void> {
 }
 
 // ─────────────────────────────────────────────────────────────
+// NEWS COLLECTION JOB
+// ─────────────────────────────────────────────────────────────
+async function newsJob(): Promise<void> {
+  const count = await safe('news-collection', () => collectForexNews());
+  if (count !== null && count > 0) {
+    log(`News: inserted ${count} new articles`);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 // SAFE WRAPPER — catches errors without crashing the scheduler
 // ─────────────────────────────────────────────────────────────
 async function safe<T>(name: string, fn: () => Promise<T>): Promise<T | null> {
@@ -130,6 +144,7 @@ function start(): void {
   log(`Full analysis: ${SCHEDULE.FULL_ANALYSIS}`);
   log(`Alert checks:  ${SCHEDULE.ALERTS}`);
   log(`Intermarket:   ${SCHEDULE.INTERMARKET}`);
+  log(`News:          ${SCHEDULE.NEWS}`);
   log('='.repeat(50));
 
   // Schedule full analysis
@@ -147,9 +162,15 @@ function start(): void {
     intermarketJob().catch(err => log(`Unhandled error in intermarket job: ${err.message}`));
   }, { timezone: 'UTC' });
 
+  // Schedule news collection
+  cron.schedule(SCHEDULE.NEWS, () => {
+    newsJob().catch(err => log(`Unhandled error in news job: ${err.message}`));
+  }, { timezone: 'UTC' });
+
   // Run once immediately on startup
   log('Running initial analysis on startup...');
   fullAnalysisJob().catch(err => log(`Startup analysis error: ${err.message}`));
+  newsJob().catch(err => log(`Startup news error: ${err.message}`));
 }
 
 // Handle graceful shutdown
