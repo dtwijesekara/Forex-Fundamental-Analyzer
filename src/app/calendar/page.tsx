@@ -8,6 +8,7 @@
 import { PageShell } from '@/components/layout/PageShell';
 import { EventPanel } from '@/components/dashboard/EventPanel';
 import { NewsFeed } from '@/components/dashboard/NewsFeed';
+import { useState, useCallback } from 'react';
 import { useAnalysis } from '@/hooks/useAnalysis';
 import { useFirstLoad } from '@/hooks/useFirstLoad';
 import { LoadingScreen } from '@/components/layout/LoadingScreen';
@@ -16,6 +17,18 @@ import { RefreshCw, AlertTriangle, Zap } from 'lucide-react';
 export default function CalendarPage() {
   const { data, loading, error, lastFetch, refreshing, isFastMode, refresh } = useAnalysis();
   const isFirstLoad = useFirstLoad(!loading && !!data);
+  const [actualsRefreshing, setActualsRefreshing] = useState(false);
+
+  // Hits /api/actuals → fetches FF JSON → patches DB → then re-reads analysis
+  const refreshActuals = useCallback(async () => {
+    setActualsRefreshing(true);
+    try {
+      await fetch('/api/actuals', { cache: 'no-store' });
+      await refresh();
+    } finally {
+      setActualsRefreshing(false);
+    }
+  }, [refresh]);
 
   if (loading && !data) return <LoadingScreen />;
   if (error && !data) return <PageShell><ErrorState error={error} onRetry={refresh} /></PageShell>;
@@ -56,8 +69,8 @@ export default function CalendarPage() {
             upcoming={upcoming_events}
             recent={recent_releases}
             risks={event_risks}
-            onRefreshActuals={refresh}
-            refreshing={refreshing}
+            onRefreshActuals={refreshActuals}
+            refreshing={actualsRefreshing || refreshing}
             isFirstLoad={isFirstLoad}
           />
           <NewsFeed />

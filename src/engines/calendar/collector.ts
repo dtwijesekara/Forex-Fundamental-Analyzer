@@ -235,8 +235,9 @@ function mapImpact(ffImpact: string): EventImpact {
 export async function refreshActuals(): Promise<{ updated: number; checked: number }> {
   const db = createAdminClient();
 
-  // Window: events that happened in the past 2 hours with no actual yet
-  const windowStart = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
+  // Window: events in the past 48 hours still missing actuals
+  // (old 2h window missed events that FF publishes with a longer delay)
+  const windowStart = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
   const now = new Date().toISOString();
 
   const { data: stale, error } = await db
@@ -246,7 +247,7 @@ export async function refreshActuals(): Promise<{ updated: number; checked: numb
     .lte('event_time', now)
     .or('actual.is.null,actual.eq.')
     .not('impact', 'eq', 'Holiday')
-    .in('tier', [1, 2]);
+    .in('tier', [1, 2, 3]);  // all tiers — speeches are often T1 but have no numeric actual
 
   if (error) throw error;
   if (!stale || stale.length === 0) return { updated: 0, checked: 0 };
