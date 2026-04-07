@@ -10,13 +10,14 @@ import { RegimeCard } from '@/components/dashboard/RegimeCard';
 import { AlertsPanel } from '@/components/dashboard/AlertsPanel';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { useAnalysis } from '@/hooks/useAnalysis';
+import { LoadingScreen } from '@/components/layout/LoadingScreen';
 import { getRegimeColor, getRegimeBg, cn } from '@/lib/utils';
 import { RefreshCw, AlertTriangle, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 export default function MarketsPage() {
   const { data, loading, error, lastFetch, refreshing, refresh } = useAnalysis();
 
-  if (loading) return <PageShell><PageSkeleton /></PageShell>;
+  if (loading && !data) return <LoadingScreen />;
   if (error && !data) return <PageShell><ErrorState error={error} onRetry={refresh} /></PageShell>;
 
   const regime        = data?.regime       ?? null;
