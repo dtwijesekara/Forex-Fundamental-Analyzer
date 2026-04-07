@@ -299,7 +299,7 @@ function RecentEventRow({ event }: { event: EconomicEvent }) {
           )}
         </div>
       ) : (
-        /* Actual not yet in FF feed — show forecast/prev + awaiting label */
+        /* Actual not published in FF feed yet */
         <div className="flex items-center gap-3 mt-1 pl-9 flex-wrap">
           {event.forecast && (
             <span className="text-[10px] text-slate-600">F: <span className="text-slate-500">{event.forecast}</span></span>
@@ -308,10 +308,10 @@ function RecentEventRow({ event }: { event: EconomicEvent }) {
             <span className="text-[10px] text-slate-700">P: {event.previous}</span>
           )}
           <span
-            className="text-[8px] text-amber-600/70 ml-auto uppercase tracking-wide"
-            title="Actual value updates within ~5–10 min of release via Forex Factory"
+            className="text-[8px] text-slate-600 ml-auto"
+            title="Forex Factory hasn't published this actual yet. The feed typically updates within 30 min–6 hours of release. Our system checks every 5 minutes automatically."
           >
-            Awaiting actual…
+            No actual from FF yet
           </span>
         </div>
       )}
