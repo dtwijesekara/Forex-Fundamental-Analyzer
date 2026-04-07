@@ -261,18 +261,39 @@ export async function refreshActuals(): Promise<{ updated: number; checked: numb
     (recentEvents as DBEvent[]).map(e => [e.event_id, e])
   );
 
-  // Step 3: Fetch FF thisweek JSON
+  // Step 3: Fetch FF thisweek JSON — with cache-busting to bypass CDN cache
   let rawEvents: RawCalendarEvent[] = [];
+  const bustUrl = `${FF_ENDPOINTS.thisweek}?t=${Date.now()}`;
   try {
-    const response = await axios.get<RawCalendarEvent[]>(FF_ENDPOINTS.thisweek, {
-      timeout: 8000,
+    const response = await axios.get<RawCalendarEvent[]>(bustUrl, {
+      timeout: 10000,
       headers: {
         'Accept': 'application/json',
-        'User-Agent': 'ForexFundamentalAnalyzer/1.0',
+        'Cache-Control': 'no-cache, no-store',
+        'Pragma': 'no-cache',
+        'User-Agent': 'Mozilla/5.0 (compatible; ForexFundamentalAnalyzer/1.0)',
       },
     });
     if (Array.isArray(response.data)) rawEvents = response.data;
-    console.log(`[refreshActuals] FF returned ${rawEvents.length} events, ${rawEvents.filter(e => e.actual).length} with actuals`);
+    const withActuals = rawEvents.filter(e => e.actual && e.actual.trim() !== '').length;
+    console.log(`[refreshActuals] FF returned ${rawEvents.length} events, ${withActuals} with actuals`);
+
+    // If FF has no actuals at all, try TradingView as a secondary source
+    if (withActuals === 0) {
+      const tvEvents = await fetchTradingViewActuals();
+      if (tvEvents.length > 0) {
+        console.log(`[refreshActuals] TradingView fallback: ${tvEvents.length} events with actuals`);
+        // Merge TV actuals into rawEvents by matching title + date prefix
+        for (const tv of tvEvents) {
+          const match = rawEvents.find(r =>
+            r.country === tv.country &&
+            r.title === tv.title &&
+            r.date.slice(0, 10) === tv.date.slice(0, 10)
+          );
+          if (match && !match.actual) match.actual = tv.actual;
+        }
+      }
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[refreshActuals] FF fetch failed:', msg);
@@ -374,6 +395,72 @@ export async function getRecentReleases(hoursBack = 24): Promise<EconomicEvent[]
   if (error) throw error;
   return (data || []) as EconomicEvent[];
 }
+
+// -----------------------------------------------------------------------
+// TRADINGVIEW ECONOMIC CALENDAR FALLBACK
+// Used when FF JSON has zero actuals (CDN cache issue or feed delay).
+// TV's public calendar API returns near-real-time data.
+// -----------------------------------------------------------------------
+interface TVEvent {
+  title: string;
+  country: string;
+  date: string;
+  actual: string;
+}
+
+async function fetchTradingViewActuals(): Promise<TVEvent[]> {
+  const now = new Date();
+  const from = new Date(now.getTime() - 48 * 3600 * 1000);
+  const toStr = now.toISOString().slice(0, 19) + 'Z';
+  const fromStr = from.toISOString().slice(0, 19) + 'Z';
+
+  // TradingView public economic calendar API (no key needed)
+  const url = `https://economic-calendar.tradingview.com/events?from=${fromStr}&to=${toStr}&countries=US,EU,GB,JP,AU,CA,NZ,CH`;
+
+  try {
+    const resp = await axios.get(url, {
+      timeout: 8000,
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Origin': 'https://www.tradingview.com',
+        'Referer': 'https://www.tradingview.com/',
+      },
+    });
+
+    const data = resp.data;
+    const events: TVEvent[] = [];
+
+    // TV response format: { result: [ { title, country, date, actual, ... } ] }
+    const rows: Array<Record<string, unknown>> = Array.isArray(data?.result) ? data.result : [];
+    for (const row of rows) {
+      const actual = (row.actual as string | null) ?? '';
+      if (!actual || actual === '') continue;
+
+      // Map TV country codes to FF country names
+      const country = TV_COUNTRY_MAP[row.country as string] ?? (row.country as string);
+      events.push({
+        title: (row.title as string) ?? '',
+        country,
+        date: (row.date as string) ?? '',
+        actual,
+      });
+    }
+    console.log(`[TV fallback] ${events.length} events with actuals from TradingView`);
+    return events;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[TV fallback] Failed: ${msg}`);
+    return [];
+  }
+}
+
+// TradingView country codes → FF country names
+const TV_COUNTRY_MAP: Record<string, string> = {
+  US: 'United States', EU: 'Euro Zone', GB: 'United Kingdom',
+  JP: 'Japan', AU: 'Australia', CA: 'Canada', NZ: 'New Zealand', CH: 'Switzerland',
+  DE: 'Germany', FR: 'France', IT: 'Italy', ES: 'Spain',
+};
 
 // Get recent events for a specific currency (for scoring)
 export async function getRecentEventsForCurrency(
