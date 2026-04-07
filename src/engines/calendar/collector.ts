@@ -235,29 +235,33 @@ function mapImpact(ffImpact: string): EventImpact {
 export async function refreshActuals(): Promise<{ updated: number; checked: number }> {
   const db = createAdminClient();
 
-  // Window: events in the past 48 hours still missing actuals
-  // (old 2h window missed events that FF publishes with a longer delay)
+  // Step 1: Get ALL events from the past 48h — no actual filter (the old
+  // .or('actual.is.null,...') Supabase filter was unreliable and returned 0 rows)
   const windowStart = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
   const now = new Date().toISOString();
 
-  const { data: stale, error } = await db
+  const { data: recentEvents, error } = await db
     .from(TABLES.ECONOMIC_EVENTS)
-    .select('id, event_id, actual')
+    .select('id, event_id, actual, event_time, event_name')
     .gte('event_time', windowStart)
     .lte('event_time', now)
-    .or('actual.is.null,actual.eq.')
-    .not('impact', 'eq', 'Holiday')
-    .in('tier', [1, 2, 3]);  // all tiers — speeches are often T1 but have no numeric actual
+    .not('impact', 'eq', 'Holiday');
 
   if (error) throw error;
-  if (!stale || stale.length === 0) return { updated: 0, checked: 0 };
+  if (!recentEvents || recentEvents.length === 0) {
+    console.log('[refreshActuals] No events in past 48h window');
+    return { updated: 0, checked: 0 };
+  }
 
-  // Build lookup: event_id → DB row id
-  const staleLookup = new Map<string, string>(
-    stale.map((e: { event_id: string; id: string }) => [e.event_id, e.id])
+  console.log(`[refreshActuals] ${recentEvents.length} events in window, fetching FF JSON...`);
+
+  // Step 2: Build lookup: event_id → {id, existing_actual}
+  type DBEvent = { id: string; event_id: string; actual: string | null; event_time: string; event_name: string };
+  const dbLookup = new Map<string, DBEvent>(
+    (recentEvents as DBEvent[]).map(e => [e.event_id, e])
   );
 
-  // Fetch only thisweek — actuals never appear in nextweek feed
+  // Step 3: Fetch FF thisweek JSON
   let rawEvents: RawCalendarEvent[] = [];
   try {
     const response = await axios.get<RawCalendarEvent[]>(FF_ENDPOINTS.thisweek, {
@@ -268,6 +272,7 @@ export async function refreshActuals(): Promise<{ updated: number; checked: numb
       },
     });
     if (Array.isArray(response.data)) rawEvents = response.data;
+    console.log(`[refreshActuals] FF returned ${rawEvents.length} events, ${rawEvents.filter(e => e.actual).length} with actuals`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[refreshActuals] FF fetch failed:', msg);
@@ -276,6 +281,7 @@ export async function refreshActuals(): Promise<{ updated: number; checked: numb
 
   let updated = 0;
 
+  // Step 4: For each FF event that has an actual, update DB if different
   for (const raw of rawEvents) {
     if (!raw.actual || raw.actual.trim() === '') continue;
 
@@ -288,15 +294,20 @@ export async function refreshActuals(): Promise<{ updated: number; checked: numb
       event_time: raw.date,
     });
 
-    const dbId = staleLookup.get(event_id);
-    if (!dbId) continue;
+    const dbEvent = dbLookup.get(event_id);
+    if (!dbEvent) continue;  // event not in our recent window
 
-    const actual_num    = parseEventValue(raw.actual);
-    const forecast_num  = parseEventValue(raw.forecast ?? null);
-    const previous_num  = parseEventValue(raw.previous ?? null);
+    // Skip if already up to date
+    if (dbEvent.actual === raw.actual) continue;
+
+    const actual_num   = parseEventValue(raw.actual);
+    const forecast_num = parseEventValue(raw.forecast ?? null);
+    const previous_num = parseEventValue(raw.previous ?? null);
     const { value: surprise_value, pct: surprise_pct } = calculateSurprise(actual_num, forecast_num);
 
-    await db.from(TABLES.ECONOMIC_EVENTS).update({
+    console.log(`[refreshActuals] Patching ${event_id}: null → "${raw.actual}"`);
+
+    const { error: updateErr } = await db.from(TABLES.ECONOMIC_EVENTS).update({
       actual: raw.actual,
       actual_num,
       forecast: raw.forecast || null,
@@ -307,13 +318,17 @@ export async function refreshActuals(): Promise<{ updated: number; checked: numb
       surprise_pct,
       is_released: true,
       updated_at: new Date().toISOString(),
-    }).eq('id', dbId);
+    }).eq('id', dbEvent.id);
 
-    updated++;
+    if (updateErr) {
+      console.error(`[refreshActuals] Update failed for ${event_id}:`, updateErr.message);
+    } else {
+      updated++;
+    }
   }
 
-  console.log(`[refreshActuals] Checked ${stale.length} stale T1/T2 events, patched ${updated}`);
-  return { updated, checked: stale.length };
+  console.log(`[refreshActuals] Checked ${recentEvents.length} events, patched ${updated}`);
+  return { updated, checked: recentEvents.length };
 }
 
 // -----------------------------------------------------------------------
