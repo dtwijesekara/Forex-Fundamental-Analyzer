@@ -15,6 +15,7 @@ import { StateCard } from '@/components/ui/StateCard';
 import { FreshnessTag } from '@/components/ui/FreshnessTag';
 import { useAnalysis } from '@/hooks/useAnalysis';
 import { useFirstLoad } from '@/hooks/useFirstLoad';
+import { LoadingScreen } from '@/components/layout/LoadingScreen';
 import { getPairBiasColor, cn } from '@/lib/utils';
 import {
   AlertTriangle, RefreshCw, ArrowRight, Activity,
@@ -67,7 +68,7 @@ export default function PairsPage() {
     }
   }, [sorted, activeFilter]);
 
-  if (loading && !data) return <PageShell><PageSkeleton /></PageShell>;
+  if (loading && !data) return <LoadingScreen />;
 
   // Stats
   const bullishCount    = rawPairs.filter(p => p.bias === 'bullish').length;

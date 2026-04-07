@@ -16,6 +16,7 @@ import { ConvictionBar } from '@/components/ui/ScoreBar';
 import { FreshnessTag, FreshnessBanner } from '@/components/ui/FreshnessTag';
 import { StateCard, SkeletonCard } from '@/components/ui/StateCard';
 import { useAnalysis } from '@/hooks/useAnalysis';
+import { LoadingScreen } from '@/components/layout/LoadingScreen';
 import {
   getPairBiasColor, getRegimeColor, formatEventTime,
   minutesUntilEvent, formatMinutesAway, formatScore, cn,
@@ -33,14 +34,8 @@ export default function OverviewPage() {
     dataComputedAt, freshness, isStale, refresh,
   } = useAnalysis();
 
-  // ── Loading skeleton ──────────────────────────────────────
-  if (loading && !data) {
-    return (
-      <PageShell>
-        <LoadingCommandCenter />
-      </PageShell>
-    );
-  }
+  // ── Loading screen ────────────────────────────────────────
+  if (loading && !data) return <LoadingScreen />;
 
   // ── Fatal error (no previous data) ───────────────────────
   if (error && !data) {

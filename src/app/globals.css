@@ -128,3 +128,17 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .stagger-item { animation: none; opacity: 1; }
 }
+
+/* -- Loading screen orbit animations --------------------------- */
+@keyframes orbit1 {
+  from { transform: rotate(0deg) translateX(28px) rotate(0deg); }
+  to   { transform: rotate(360deg) translateX(28px) rotate(-360deg); }
+}
+@keyframes orbit2 {
+  from { transform: rotate(0deg) translateX(40px) rotate(0deg); }
+  to   { transform: rotate(360deg) translateX(40px) rotate(-360deg); }
+}
+@keyframes scan {
+  0%   { left: -56px; }
+  100% { left: 144px; }
+}

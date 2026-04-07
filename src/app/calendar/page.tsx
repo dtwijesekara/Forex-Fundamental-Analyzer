@@ -10,13 +10,14 @@ import { EventPanel } from '@/components/dashboard/EventPanel';
 import { NewsFeed } from '@/components/dashboard/NewsFeed';
 import { useAnalysis } from '@/hooks/useAnalysis';
 import { useFirstLoad } from '@/hooks/useFirstLoad';
+import { LoadingScreen } from '@/components/layout/LoadingScreen';
 import { RefreshCw, AlertTriangle, Zap } from 'lucide-react';
 
 export default function CalendarPage() {
   const { data, loading, error, lastFetch, refreshing, isFastMode, refresh } = useAnalysis();
   const isFirstLoad = useFirstLoad(!loading && !!data);
 
-  if (loading && !data) return <PageShell><PageSkeleton /></PageShell>;
+  if (loading && !data) return <LoadingScreen />;
   if (error && !data) return <PageShell><ErrorState error={error} onRetry={refresh} /></PageShell>;
 
   const upcoming_events  = data?.upcoming_events  ?? [];
