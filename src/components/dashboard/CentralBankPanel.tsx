@@ -140,9 +140,9 @@ const BANK_NAMES: Partial<Record<string, string>> = {
 function scoreToBiasLabel(scoreCb: number): CBBiasLabel {
   if (scoreCb >= 18)  return 'Aggressive Hawkish';
   if (scoreCb >= 10)  return 'Hawkish';
-  if (scoreCb >= 4)   return 'Slightly Hawkish';
+  if (scoreCb >= 4)   return 'Mildly Hawkish';
   if (scoreCb >= -3)  return 'Neutral';
-  if (scoreCb >= -9)  return 'Slightly Dovish';
+  if (scoreCb >= -9)  return 'Mildly Dovish';
   if (scoreCb >= -17) return 'Dovish';
   return 'Aggressive Dovish';
 }
