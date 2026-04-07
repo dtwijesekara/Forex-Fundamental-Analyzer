@@ -242,19 +242,28 @@ async function saveScores(scores: CurrencyScore[]): Promise<void> {
 }
 
 // -----------------------------------------------------------------------
-// GET CURRENT SCORES
+// GET CURRENT SCORES — enriched with CB bias data
 // -----------------------------------------------------------------------
 export async function getCurrentCurrencyScores(): Promise<CurrencyScore[]> {
   const db = createAdminClient();
 
-  const { data, error } = await db
-    .from(TABLES.CURRENCY_SCORES)
-    .select('*')
-    .eq('is_current', true)
-    .order('score', { ascending: false });
+  const [{ data, error }, cbBiases] = await Promise.all([
+    db.from(TABLES.CURRENCY_SCORES)
+      .select('*')
+      .eq('is_current', true)
+      .order('score', { ascending: false }),
+    getAllCBBiases().catch(() => ({} as Record<Currency, import('@/types').CentralBankBias>)),
+  ]);
 
   if (error) throw error;
-  return (data || []) as CurrencyScore[];
+
+  const scores = (data || []) as CurrencyScore[];
+
+  // Attach CB bias so UI components can show central bank stance
+  return scores.map(s => ({
+    ...s,
+    cb_bias: cbBiases[s.currency as Currency] ?? undefined,
+  }));
 }
 
 // -----------------------------------------------------------------------

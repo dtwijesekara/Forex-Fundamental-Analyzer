@@ -17,10 +17,12 @@ interface CentralBankPanelProps {
 }
 
 export function CentralBankPanel({ currencies }: CentralBankPanelProps) {
-  // Only show currencies that have cb_bias data
-  const sorted = [...currencies]
-    .filter(c => c.cb_bias)
-    .sort((a, b) => (b.cb_bias!.bias_score) - (a.cb_bias!.bias_score));
+  // Sort: currencies with cb_bias first (by bias_score), others by score
+  const sorted = [...currencies].sort((a, b) => {
+    const aScore = a.cb_bias?.bias_score ?? (a.score_cb / 5);
+    const bScore = b.cb_bias?.bias_score ?? (b.score_cb / 5);
+    return bScore - aScore;
+  });
 
   if (sorted.length === 0) return null;
 
@@ -43,12 +45,20 @@ export function CentralBankPanel({ currencies }: CentralBankPanelProps) {
 
 // ── SINGLE CB ROW ─────────────────────────────────────────────
 function CBRow({ score }: { score: CurrencyScore }) {
-  const cb = score.cb_bias!;
+  const cb = score.cb_bias;
 
-  const { color: biasColor, bg: biasBg } = getBiasStyle(cb.bias_label);
-  const { icon: TrendIcon, color: trendColor, label: trendLabel } = getTrendStyle(cb.rate_trend);
+  // Derive bias label from cb_bias or fall back to score_cb
+  const biasLabel: CBBiasLabel = cb?.bias_label ?? scoreToBiasLabel(score.score_cb);
+  const { color: biasColor, bg: biasBg } = getBiasStyle(biasLabel);
 
-  const nextMeeting = cb.next_meeting_date
+  const rateTrend: RateTrend = cb?.rate_trend ?? 'unknown';
+  const { icon: TrendIcon, color: trendColor, label: trendLabel } = getTrendStyle(rateTrend);
+
+  const bankName  = cb?.bank_name ?? BANK_NAMES[score.currency as Currency] ?? score.currency;
+  const rate      = cb?.current_rate ?? null;
+  const keyPhrase = cb?.key_phrase ?? null;
+
+  const nextMeeting = cb?.next_meeting_date
     ? new Date(cb.next_meeting_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
     : null;
 
@@ -64,7 +74,7 @@ function CBRow({ score }: { score: CurrencyScore }) {
 
         {/* Bank name */}
         <div className="flex-1 min-w-0">
-          <p className="text-[10px] text-slate-500 truncate">{cb.bank_name}</p>
+          <p className="text-[10px] text-slate-500 truncate">{bankName}</p>
         </div>
 
         {/* Rate trend indicator */}
@@ -74,10 +84,10 @@ function CBRow({ score }: { score: CurrencyScore }) {
         </div>
 
         {/* Current rate */}
-        {cb.current_rate != null && (
+        {rate != null && (
           <div className="shrink-0 text-right">
             <span className="text-[10px] font-mono font-bold text-slate-200">
-              {cb.current_rate.toFixed(2)}%
+              {rate.toFixed(2)}%
             </span>
           </div>
         )}
@@ -87,16 +97,21 @@ function CBRow({ score }: { score: CurrencyScore }) {
           'shrink-0 text-[8px] font-bold px-2 py-0.5 rounded border leading-none whitespace-nowrap',
           biasBg, biasColor
         )}>
-          {formatBiasLabel(cb.bias_label)}
+          {formatBiasLabel(biasLabel)}
         </div>
       </div>
 
-      {/* Key phrase / next meeting */}
+      {/* Key phrase / next meeting / CB score */}
       <div className="flex items-center gap-3 mt-1 pl-[72px] flex-wrap">
-        {cb.key_phrase && (
+        {keyPhrase ? (
           <p className="text-[9px] text-slate-600 italic flex-1 min-w-0 truncate">
-            "{cb.key_phrase}"
+            "{keyPhrase}"
           </p>
+        ) : (
+          <span className="text-[9px] text-slate-700 flex-1">
+            CB score: <span className={score.score_cb >= 0 ? 'text-emerald-600' : 'text-rose-600'}>{score.score_cb > 0 ? '+' : ''}{score.score_cb}</span>
+            {' · '}Rate: <span className={score.score_rate >= 0 ? 'text-emerald-600' : 'text-rose-600'}>{score.score_rate > 0 ? '+' : ''}{score.score_rate}</span>
+          </span>
         )}
         {nextMeeting && (
           <div className="flex items-center gap-1 shrink-0 text-[9px] text-slate-600">
@@ -107,6 +122,29 @@ function CBRow({ score }: { score: CurrencyScore }) {
       </div>
     </div>
   );
+}
+
+// ── STATIC BANK NAMES FALLBACK ───────────────────────────────
+const BANK_NAMES: Partial<Record<string, string>> = {
+  USD: 'Federal Reserve (Fed)',
+  EUR: 'European Central Bank (ECB)',
+  GBP: 'Bank of England (BoE)',
+  JPY: 'Bank of Japan (BoJ)',
+  AUD: 'Reserve Bank of Australia (RBA)',
+  CAD: 'Bank of Canada (BoC)',
+  NZD: 'Reserve Bank of New Zealand (RBNZ)',
+  CHF: 'Swiss National Bank (SNB)',
+};
+
+/** Convert score_cb component (-25 to +25) to a rough bias label */
+function scoreToBiasLabel(scoreCb: number): CBBiasLabel {
+  if (scoreCb >= 18)  return 'Aggressive Hawkish';
+  if (scoreCb >= 10)  return 'Hawkish';
+  if (scoreCb >= 4)   return 'Slightly Hawkish';
+  if (scoreCb >= -3)  return 'Neutral';
+  if (scoreCb >= -9)  return 'Slightly Dovish';
+  if (scoreCb >= -17) return 'Dovish';
+  return 'Aggressive Dovish';
 }
 
 // ── HELPERS ───────────────────────────────────────────────────
