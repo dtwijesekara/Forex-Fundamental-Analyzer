@@ -14,6 +14,7 @@ import { ConvictionBar } from '@/components/ui/ScoreBar';
 import { StateCard } from '@/components/ui/StateCard';
 import { FreshnessTag } from '@/components/ui/FreshnessTag';
 import { useAnalysis } from '@/hooks/useAnalysis';
+import { useFirstLoad } from '@/hooks/useFirstLoad';
 import { getPairBiasColor, cn } from '@/lib/utils';
 import {
   AlertTriangle, RefreshCw, ArrowRight, Activity,
@@ -41,6 +42,7 @@ export default function PairsPage() {
   const [activeFilter, setActiveFilter] = useState<FilterKey>('all');
   const [sortBy, setSortBy] = useState<SortKey>('conviction');
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const isFirstLoad = useFirstLoad(!loading && !!data);
 
   const rawPairs = data?.pairs ?? [];
 
@@ -232,6 +234,7 @@ export default function PairsPage() {
                 accent="emerald"
                 icon={<Zap size={11} className="text-emerald-400" />}
                 pairs={highConv}
+                isFirstLoad={isFirstLoad}
               />
             )}
 
@@ -243,6 +246,7 @@ export default function PairsPage() {
                 accent="amber"
                 icon={<TrendingUp size={11} className="text-amber-400" />}
                 pairs={midConv}
+                isFirstLoad={isFirstLoad}
               />
             )}
 
@@ -254,6 +258,7 @@ export default function PairsPage() {
                 accent="slate"
                 icon={<Activity size={11} className="text-slate-500" />}
                 pairs={lowConv}
+                isFirstLoad={isFirstLoad}
               />
             )}
           </div>
@@ -265,13 +270,14 @@ export default function PairsPage() {
 
 // ── PAIR TIER ─────────────────────────────────────────────────
 function PairTier({
-  title, subtitle, accent, icon, pairs,
+  title, subtitle, accent, icon, pairs, isFirstLoad,
 }: {
   title: string;
   subtitle: string;
   accent: 'emerald' | 'amber' | 'slate';
   icon: React.ReactNode;
   pairs: PairBiasResult[];
+  isFirstLoad?: boolean;
 }) {
   const accentBorder = {
     emerald: 'border-emerald-500/20',
@@ -298,19 +304,27 @@ function PairTier({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-        {pairs.map(pair => <PairCard key={pair.pair} pair={pair} />)}
+        {pairs.map((pair, i) => (
+          <PairCard key={pair.pair} pair={pair} className={isFirstLoad ? 'stagger-item' : ''} index={i} />
+        ))}
       </div>
     </div>
   );
 }
 
 // ── PAIR CARD ─────────────────────────────────────────────────
-function PairCard({ pair }: { pair: PairBiasResult }) {
+function PairCard({ pair, className, index }: { pair: PairBiasResult; className?: string; index?: number }) {
   const biasColor = getPairBiasColor(pair.bias);
   const isHighConv = pair.conviction_pct >= 70;
 
   return (
-    <Link href={`/pair/${pair.pair}`} className="group block">
+    <Link
+      href={`/pair/${pair.pair}`}
+      className={cn('group block', className)}
+      style={className?.includes('stagger-item') && index !== undefined
+        ? { animationDelay: `${Math.min(index + 1, 10) * 40}ms` }
+        : undefined}
+    >
       <div className={cn(
         'rounded-xl border p-4 transition-all duration-200',
         'bg-[#13131d]/90 hover:bg-[#16162a]/90',

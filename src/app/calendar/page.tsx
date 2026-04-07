@@ -9,10 +9,12 @@ import { PageShell } from '@/components/layout/PageShell';
 import { EventPanel } from '@/components/dashboard/EventPanel';
 import { NewsFeed } from '@/components/dashboard/NewsFeed';
 import { useAnalysis } from '@/hooks/useAnalysis';
-import { RefreshCw, AlertTriangle } from 'lucide-react';
+import { useFirstLoad } from '@/hooks/useFirstLoad';
+import { RefreshCw, AlertTriangle, Zap } from 'lucide-react';
 
 export default function CalendarPage() {
-  const { data, loading, error, lastFetch, refreshing, refresh } = useAnalysis();
+  const { data, loading, error, lastFetch, refreshing, isFastMode, refresh } = useAnalysis();
+  const isFirstLoad = useFirstLoad(!loading && !!data);
 
   if (loading && !data) return <PageShell><PageSkeleton /></PageShell>;
   if (error && !data) return <PageShell><ErrorState error={error} onRetry={refresh} /></PageShell>;
@@ -33,11 +35,18 @@ export default function CalendarPage() {
               {upcoming_events.filter(e => e.tier <= 2).length} high-impact events upcoming
             </p>
           </div>
-          {refreshing && (
-            <div className="flex items-center gap-1.5 text-[10px] text-emerald-400">
-              <RefreshCw size={10} className="animate-spin" /> Updating…
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {isFastMode && (
+              <div className="flex items-center gap-1 text-[9px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded px-1.5 py-0.5">
+                <Zap size={8} /> Fast mode
+              </div>
+            )}
+            {refreshing && (
+              <div className="flex items-center gap-1.5 text-[10px] text-emerald-400">
+                <RefreshCw size={10} className="animate-spin" /> Updating…
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Two-column: events + news */}
@@ -46,6 +55,9 @@ export default function CalendarPage() {
             upcoming={upcoming_events}
             recent={recent_releases}
             risks={event_risks}
+            onRefreshActuals={refresh}
+            refreshing={refreshing}
+            isFirstLoad={isFirstLoad}
           />
           <NewsFeed />
         </div>

@@ -227,6 +227,95 @@ function mapImpact(ffImpact: string): EventImpact {
 }
 
 // -----------------------------------------------------------------------
+// FAST ACTUALS REFRESH
+// Surgical update: only re-fetches thisweek FF JSON and patches T1/T2
+// events from the past 2 hours that are still missing actual values.
+// Designed to run every 5 min — completes in < 10 s.
+// -----------------------------------------------------------------------
+export async function refreshActuals(): Promise<{ updated: number; checked: number }> {
+  const db = createAdminClient();
+
+  // Window: events that happened in the past 2 hours with no actual yet
+  const windowStart = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
+  const now = new Date().toISOString();
+
+  const { data: stale, error } = await db
+    .from(TABLES.ECONOMIC_EVENTS)
+    .select('id, event_id, actual')
+    .gte('event_time', windowStart)
+    .lte('event_time', now)
+    .or('actual.is.null,actual.eq.')
+    .not('impact', 'eq', 'Holiday')
+    .in('tier', [1, 2]);
+
+  if (error) throw error;
+  if (!stale || stale.length === 0) return { updated: 0, checked: 0 };
+
+  // Build lookup: event_id → DB row id
+  const staleLookup = new Map<string, string>(
+    stale.map((e: { event_id: string; id: string }) => [e.event_id, e.id])
+  );
+
+  // Fetch only thisweek — actuals never appear in nextweek feed
+  let rawEvents: RawCalendarEvent[] = [];
+  try {
+    const response = await axios.get<RawCalendarEvent[]>(FF_ENDPOINTS.thisweek, {
+      timeout: 8000,
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'ForexFundamentalAnalyzer/1.0',
+      },
+    });
+    if (Array.isArray(response.data)) rawEvents = response.data;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[refreshActuals] FF fetch failed:', msg);
+    throw err;
+  }
+
+  let updated = 0;
+
+  for (const raw of rawEvents) {
+    if (!raw.actual || raw.actual.trim() === '') continue;
+
+    const currency = COUNTRY_TO_CURRENCY[raw.country] as Currency;
+    if (!currency) continue;
+
+    const event_id = makeEventId({
+      currency,
+      event_name: raw.title,
+      event_time: raw.date,
+    });
+
+    const dbId = staleLookup.get(event_id);
+    if (!dbId) continue;
+
+    const actual_num    = parseEventValue(raw.actual);
+    const forecast_num  = parseEventValue(raw.forecast ?? null);
+    const previous_num  = parseEventValue(raw.previous ?? null);
+    const { value: surprise_value, pct: surprise_pct } = calculateSurprise(actual_num, forecast_num);
+
+    await db.from(TABLES.ECONOMIC_EVENTS).update({
+      actual: raw.actual,
+      actual_num,
+      forecast: raw.forecast || null,
+      forecast_num,
+      previous: raw.previous || null,
+      previous_num,
+      surprise_value,
+      surprise_pct,
+      is_released: true,
+      updated_at: new Date().toISOString(),
+    }).eq('id', dbId);
+
+    updated++;
+  }
+
+  console.log(`[refreshActuals] Checked ${stale.length} stale T1/T2 events, patched ${updated}`);
+  return { updated, checked: stale.length };
+}
+
+// -----------------------------------------------------------------------
 // QUERY HELPERS
 // -----------------------------------------------------------------------
 

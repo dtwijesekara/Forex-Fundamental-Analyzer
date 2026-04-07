@@ -9,16 +9,19 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { TierBadge } from '@/components/ui/Badge';
 import { formatEventTime, formatEventDateTime, minutesUntilEvent, formatMinutesAway, cn } from '@/lib/utils';
 import { CURRENCY_FLAGS } from '@/lib/constants';
-import { Clock, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Clock, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react';
 import type { EconomicEvent, EventRiskWarning, Currency } from '@/types';
 
 interface EventPanelProps {
   upcoming: EconomicEvent[];
   recent: EconomicEvent[];
   risks: EventRiskWarning[];
+  onRefreshActuals?: () => Promise<void>;
+  refreshing?: boolean;
+  isFirstLoad?: boolean;
 }
 
-export function EventPanel({ upcoming, recent, risks }: EventPanelProps) {
+export function EventPanel({ upcoming, recent, risks, onRefreshActuals, refreshing, isFirstLoad }: EventPanelProps) {
   // Filter to high/medium impact only
   const importantUpcoming = upcoming.filter(e => e.tier <= 2).slice(0, 8);
   const importantRecent = recent.filter(e => e.tier <= 2).slice(0, 5);
@@ -49,8 +52,8 @@ export function EventPanel({ upcoming, recent, risks }: EventPanelProps) {
             <p className="text-slate-500 text-xs p-4">No high/medium impact events in next 24h</p>
           ) : (
             <div className="divide-y divide-slate-700/30">
-              {importantUpcoming.map(event => (
-                <UpcomingEventRow key={event.id} event={event} />
+              {importantUpcoming.map((event, i) => (
+                <UpcomingEventRow key={event.id} event={event} animate={isFirstLoad} index={i} />
               ))}
             </div>
           )}
@@ -61,9 +64,22 @@ export function EventPanel({ upcoming, recent, risks }: EventPanelProps) {
       <Card>
         <CardHeader>
           <CardTitle>Recent Releases</CardTitle>
-          <div className="flex items-center gap-1 text-slate-500">
-            <CheckCircle size={12} />
-            <span className="text-xs">Last 12h</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 text-slate-500">
+              <CheckCircle size={12} />
+              <span className="text-xs">Last 12h</span>
+            </div>
+            {onRefreshActuals && (
+              <button
+                onClick={onRefreshActuals}
+                disabled={refreshing}
+                className="flex items-center gap-1 text-[9px] text-slate-500 hover:text-slate-300 transition-colors disabled:opacity-40"
+                title="Refresh actuals from Forex Factory"
+              >
+                <RefreshCw size={9} className={refreshing ? 'animate-spin' : ''} />
+                Refresh
+              </button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -104,7 +120,7 @@ function RiskWarningBanner({ risk }: { risk: EventRiskWarning }) {
   );
 }
 
-function UpcomingEventRow({ event }: { event: EconomicEvent }) {
+function UpcomingEventRow({ event, animate, index }: { event: EconomicEvent; animate?: boolean; index: number }) {
   const minutesAway = minutesUntilEvent(event.event_time);
   const isVeryClose = minutesAway <= 30;
   const isSoon = minutesAway <= 120;
@@ -114,7 +130,10 @@ function UpcomingEventRow({ event }: { event: EconomicEvent }) {
       'px-4 py-2.5 flex items-center gap-3',
       isVeryClose && 'bg-rose-500/5',
       isSoon && !isVeryClose && 'bg-amber-500/5',
-    )}>
+      animate && 'stagger-item',
+    )}
+    style={animate ? { animationDelay: `${Math.min(index + 1, 10) * 40}ms` } : undefined}
+    >
       {/* Time */}
       <div className="text-right shrink-0">
         <div className="text-xs font-mono text-slate-300">{formatEventTime(event.event_time)}</div>

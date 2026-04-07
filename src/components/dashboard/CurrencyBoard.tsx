@@ -17,9 +17,10 @@ import type { CurrencyScore, Currency } from '@/types';
 
 interface CurrencyBoardProps {
   scores: CurrencyScore[];
+  isFirstLoad?: boolean;
 }
 
-export function CurrencyBoard({ scores }: CurrencyBoardProps) {
+export function CurrencyBoard({ scores, isFirstLoad }: CurrencyBoardProps) {
   const [expandedCurrency, setExpandedCurrency] = useState<string | null>(null);
   const sorted = [...scores].sort((a, b) => b.score - a.score);
   const strongest = sorted.slice(0, 3);
@@ -83,6 +84,8 @@ export function CurrencyBoard({ scores }: CurrencyBoardProps) {
               rank={idx + 1}
               expanded={expandedCurrency === score.currency}
               onToggle={() => toggle(score.currency)}
+              animate={isFirstLoad}
+              index={idx}
             />
           ))}
         </div>
@@ -93,18 +96,23 @@ export function CurrencyBoard({ scores }: CurrencyBoardProps) {
 
 // ── CURRENCY ROW ──────────────────────────────────────────────
 function CurrencyRow({
-  score, rank, expanded, onToggle,
+  score, rank, expanded, onToggle, animate, index,
 }: {
   score: CurrencyScore;
   rank: number;
   expanded: boolean;
   onToggle: () => void;
+  animate?: boolean;
+  index?: number;
 }) {
   const isTop    = rank <= 3;
   const isBottom = rank >= 6;
 
   return (
-    <div>
+    <div
+      className={animate ? 'stagger-item' : undefined}
+      style={animate && index !== undefined ? { animationDelay: `${Math.min(index + 1, 10) * 40}ms` } : undefined}
+    >
       {/* Main row — clickable */}
       <button
         className="w-full text-left px-4 py-3 hover:bg-white/[0.02] transition-colors group"

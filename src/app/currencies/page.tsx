@@ -10,12 +10,14 @@ import { CurrencyBoard } from '@/components/dashboard/CurrencyBoard';
 import { ScoreHistoryChart } from '@/components/dashboard/ScoreHistoryChart';
 import { Card, CardContent } from '@/components/ui/Card';
 import { useAnalysis } from '@/hooks/useAnalysis';
+import { useFirstLoad } from '@/hooks/useFirstLoad';
 import { Activity, RefreshCw, AlertTriangle } from 'lucide-react';
 
 export default function CurrenciesPage() {
   const { data, loading, error, lastFetch, refreshing, refresh } = useAnalysis();
+  const isFirstLoad = useFirstLoad(!loading && !!data);
 
-  if (loading) return <PageShell><PageSkeleton /></PageShell>;
+  if (loading && !data) return <PageShell><PageSkeleton /></PageShell>;
   if (error && !data) return <PageShell><ErrorState error={error} onRetry={refresh} /></PageShell>;
 
   const currencies = data?.currencies ?? [];
@@ -41,7 +43,7 @@ export default function CurrenciesPage() {
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           <div>
             {currencies.length > 0
-              ? <CurrencyBoard scores={currencies} />
+              ? <CurrencyBoard scores={currencies} isFirstLoad={isFirstLoad} />
               : <EmptyState message="No currency data — run analysis first." />}
           </div>
           <div>

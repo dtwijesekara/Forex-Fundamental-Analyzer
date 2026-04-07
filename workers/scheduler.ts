@@ -15,6 +15,7 @@ import { detectAndStoreRegime } from '../src/engines/regime/detector';
 import { runAlertCheck } from '../src/engines/alerts/alert-engine';
 import { generateEventRiskWarnings } from '../src/engines/risk/event-risk';
 import { collectForexNews } from '../src/engines/news/collector';
+import { refreshActuals } from '../src/engines/calendar/collector';
 
 // ─────────────────────────────────────────────────────────────
 // SCHEDULE CONFIGURATION
@@ -35,10 +36,14 @@ const SCHEDULE = {
 
   // Forex news collection: every 20 minutes
   NEWS: process.env.WORKER_CRON_NEWS || '*/20 * * * *',
+
+  // Fast actuals patch: every 5 minutes (surgical T1/T2 actual value refresh)
+  FAST_ACTUALS: process.env.WORKER_CRON_FAST_ACTUALS || '*/5 * * * *',
 };
 
 let isAnalysisRunning = false;
 let isAlertRunning = false;
+let isActualsRunning = false;
 
 // ─────────────────────────────────────────────────────────────
 // FULL ANALYSIS JOB
@@ -115,6 +120,24 @@ async function newsJob(): Promise<void> {
 }
 
 // ─────────────────────────────────────────────────────────────
+// FAST ACTUALS JOB — patches T1/T2 events missing actuals (< 10 s)
+// ─────────────────────────────────────────────────────────────
+async function fastActualsJob(): Promise<void> {
+  if (isActualsRunning || isAnalysisRunning) return;
+  isActualsRunning = true;
+
+  try {
+    const result = await safe('fast-actuals', () => refreshActuals());
+    if (result && result.updated > 0) {
+      log(`Fast actuals: patched ${result.updated}/${result.checked} events — re-scoring...`);
+      await safe('event-scoring-fast', () => parseAndScoreRecentReleases());
+    }
+  } finally {
+    isActualsRunning = false;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 // SAFE WRAPPER — catches errors without crashing the scheduler
 // ─────────────────────────────────────────────────────────────
 async function safe<T>(name: string, fn: () => Promise<T>): Promise<T | null> {
@@ -145,6 +168,7 @@ function start(): void {
   log(`Alert checks:  ${SCHEDULE.ALERTS}`);
   log(`Intermarket:   ${SCHEDULE.INTERMARKET}`);
   log(`News:          ${SCHEDULE.NEWS}`);
+  log(`Fast actuals:  ${SCHEDULE.FAST_ACTUALS}`);
   log('='.repeat(50));
 
   // Schedule full analysis
@@ -165,6 +189,11 @@ function start(): void {
   // Schedule news collection
   cron.schedule(SCHEDULE.NEWS, () => {
     newsJob().catch(err => log(`Unhandled error in news job: ${err.message}`));
+  }, { timezone: 'UTC' });
+
+  // Schedule fast actuals patch
+  cron.schedule(SCHEDULE.FAST_ACTUALS, () => {
+    fastActualsJob().catch(err => log(`Unhandled error in fast-actuals job: ${err.message}`));
   }, { timezone: 'UTC' });
 
   // Run once immediately on startup
