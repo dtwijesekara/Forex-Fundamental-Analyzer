@@ -14,7 +14,7 @@ import { RefreshCw, AlertTriangle } from 'lucide-react';
 export default function CalendarPage() {
   const { data, loading, error, lastFetch, refreshing, refresh } = useAnalysis();
 
-  if (loading) return <PageShell><PageSkeleton /></PageShell>;
+  if (loading && !data) return <PageShell><PageSkeleton /></PageShell>;
   if (error && !data) return <PageShell><ErrorState error={error} onRetry={refresh} /></PageShell>;
 
   const upcoming_events  = data?.upcoming_events  ?? [];

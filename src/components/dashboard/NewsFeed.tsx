@@ -204,13 +204,13 @@ function NewsRow({ item }: { item: NewsItem }) {
               href={item.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[11px] text-slate-200 hover:text-white leading-snug line-clamp-2 inline-flex items-start gap-1 group-hover:underline"
+              className="text-[11px] text-slate-100 hover:text-white leading-snug line-clamp-2 inline-flex items-start gap-1 group-hover:underline"
             >
               {item.title}
-              <ExternalLink size={8} className="shrink-0 mt-0.5 opacity-0 group-hover:opacity-40 transition-opacity" />
+              <ExternalLink size={8} className="shrink-0 mt-0.5 opacity-0 group-hover:opacity-60 transition-opacity" />
             </a>
           ) : (
-            <p className="text-[11px] text-slate-200 leading-snug line-clamp-2">{item.title}</p>
+            <p className="text-[11px] text-slate-100 leading-snug line-clamp-2">{item.title}</p>
           )}
         </div>
       </div>
@@ -219,12 +219,12 @@ function NewsRow({ item }: { item: NewsItem }) {
       <div className="flex items-center gap-2 mt-1.5 pl-5 flex-wrap">
         <div className="flex items-center gap-1">
           <span className={cn('w-1.5 h-1.5 rounded-full', impactDot)} />
-          <span className="text-[9px] text-slate-600 capitalize">{item.impact}</span>
+          <span className="text-[9px] text-slate-400 capitalize">{item.impact}</span>
         </div>
-        <span className="text-[9px] text-slate-600">
+        <span className="text-[9px] text-slate-400 font-medium">
           {SOURCE_LABELS[item.source] ?? item.source}
         </span>
-        <span className="text-[9px] text-slate-700">
+        <span className="text-[9px] text-slate-500">
           {formatTimeAgo(item.published_at)}
         </span>
 
@@ -234,12 +234,12 @@ function NewsRow({ item }: { item: NewsItem }) {
             <span
               key={c}
               className={cn(
-                'text-[8px] font-bold px-1 py-0.5 rounded leading-none',
+                'text-[8px] font-bold px-1.5 py-0.5 rounded leading-none',
                 item.sentiment === 'bullish'
-                  ? 'bg-emerald-500/15 text-emerald-400'
+                  ? 'bg-emerald-500/20 text-emerald-300'
                   : item.sentiment === 'bearish'
-                  ? 'bg-red-500/15 text-red-400'
-                  : 'bg-slate-700/50 text-slate-500'
+                  ? 'bg-red-500/20 text-red-300'
+                  : 'bg-slate-700/60 text-slate-400'
               )}
             >
               {c}
@@ -252,7 +252,7 @@ function NewsRow({ item }: { item: NewsItem }) {
       {item.tags.length > 0 && (
         <div className="flex gap-1 mt-1 pl-5 flex-wrap">
           {item.tags.slice(0, 4).map(tag => (
-            <span key={tag} className="text-[8px] text-slate-700 bg-slate-800/40 px-1 rounded">
+            <span key={tag} className="text-[8px] text-slate-500 bg-slate-800/60 px-1.5 py-0.5 rounded">
               #{tag}
             </span>
           ))}

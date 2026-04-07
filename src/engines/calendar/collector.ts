@@ -250,16 +250,19 @@ export async function getUpcomingEvents(hoursAhead = 48): Promise<EconomicEvent[
 }
 
 // Get recent releases (last N hours)
+// Queries by past event_time rather than is_released flag, because Forex
+// Factory's JSON feed rarely includes actual values in real-time — events
+// that have already happened will still show even without actuals.
 export async function getRecentReleases(hoursBack = 24): Promise<EconomicEvent[]> {
   const db = createAdminClient();
   const since = new Date(Date.now() - hoursBack * 3600 * 1000).toISOString();
+  const now = new Date().toISOString();
 
   const { data, error } = await db
     .from(TABLES.ECONOMIC_EVENTS)
     .select('*')
-    .eq('is_released', true)
     .gte('event_time', since)
-    .lte('event_time', new Date().toISOString())
+    .lte('event_time', now)
     .not('impact', 'eq', 'Holiday')
     .order('event_time', { ascending: false });
 
