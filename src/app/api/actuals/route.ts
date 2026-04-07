@@ -1,39 +1,33 @@
 // ============================================================
 // API ROUTE: /api/actuals  (GET)
-// Lightweight endpoint: fetches latest FF JSON and patches any
-// events still missing actual values in the DB.
-// Called by the "Refresh" button in Recent Releases.
-// No auth needed — read-only from a public source.
+// Lightweight: fetch FF JSON → patch missing actuals in DB → re-score.
+// Called by the "Refresh" button. No auth needed.
+// Kept intentionally fast — no full calendar sync (Railway handles that).
 // ============================================================
 
 import { NextResponse } from 'next/server';
 import { refreshActuals } from '@/engines/calendar/collector';
-import { collectCalendarEvents } from '@/engines/calendar/collector';
 import { parseAndScoreRecentReleases } from '@/engines/calendar/parser';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 30; // seconds — enough for FF fetch + DB patch
 
 export async function GET() {
+  const start = Date.now();
   try {
-    // 1. Fast patch: surgically update events missing actuals in past 48h
-    const actualsResult = await refreshActuals();
+    const result = await refreshActuals();
 
-    // 2. Full calendar sync: picks up any newly published actuals FF-side
-    const calResult = await collectCalendarEvents();
-
-    // 3. If anything changed, re-score recent events
-    const totalUpdated = actualsResult.updated + calResult.updated;
     let scored = 0;
-    if (totalUpdated > 0) {
+    if (result.updated > 0) {
       scored = await parseAndScoreRecentReleases().catch(() => 0);
     }
 
     return NextResponse.json({
       success: true,
-      actuals_patched: actualsResult.updated,
-      calendar_updated: calResult.updated,
+      checked: result.checked,
+      actuals_patched: result.updated,
       events_scored: scored,
-      checked: actualsResult.checked,
+      duration_ms: Date.now() - start,
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
