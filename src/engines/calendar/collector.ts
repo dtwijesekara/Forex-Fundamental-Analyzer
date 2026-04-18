@@ -228,21 +228,21 @@ function mapImpact(ffImpact: string): EventImpact {
 
 // -----------------------------------------------------------------------
 // FAST ACTUALS REFRESH
-// Surgical update: only re-fetches thisweek FF JSON and patches T1/T2
-// events from the past 2 hours that are still missing actual values.
-// Designed to run every 5 min — completes in < 10 s.
+// Surgical update: re-fetches FF JSON (with cache-bust) and patches any
+// DB events from the past 48h whose actual value has changed/appeared.
+// Falls back to TradingView economic calendar when FF CDN has 0 actuals.
+// Designed to run every 5 min — completes in < 15 s.
 // -----------------------------------------------------------------------
 export async function refreshActuals(): Promise<{ updated: number; checked: number }> {
   const db = createAdminClient();
 
-  // Step 1: Get ALL events from the past 48h — no actual filter (the old
-  // .or('actual.is.null,...') Supabase filter was unreliable and returned 0 rows)
+  // ── 1. Load recent DB events ────────────────────────────────────────
   const windowStart = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
   const now = new Date().toISOString();
 
   const { data: recentEvents, error } = await db
     .from(TABLES.ECONOMIC_EVENTS)
-    .select('id, event_id, actual, event_time, event_name')
+    .select('id, event_id, actual, event_time, event_name, currency, forecast_num')
     .gte('event_time', windowStart)
     .lte('event_time', now)
     .not('impact', 'eq', 'Holiday');
@@ -253,103 +253,168 @@ export async function refreshActuals(): Promise<{ updated: number; checked: numb
     return { updated: 0, checked: 0 };
   }
 
-  console.log(`[refreshActuals] ${recentEvents.length} events in window, fetching FF JSON...`);
+  type DBEvent = {
+    id: string;
+    event_id: string;
+    actual: string | null;
+    event_time: string;
+    event_name: string;
+    currency: string;
+    forecast_num: number | null;
+  };
+  const dbEvents = recentEvents as DBEvent[];
 
-  // Step 2: Build lookup: event_id → {id, existing_actual}
-  type DBEvent = { id: string; event_id: string; actual: string | null; event_time: string; event_name: string };
-  const dbLookup = new Map<string, DBEvent>(
-    (recentEvents as DBEvent[]).map(e => [e.event_id, e])
-  );
+  // Primary lookup: event_id → DBEvent  (for FF matching by exact ID)
+  const idLookup = new Map<string, DBEvent>(dbEvents.map(e => [e.event_id, e]));
 
-  // Step 3: Fetch FF thisweek JSON — with cache-busting to bypass CDN cache
-  let rawEvents: RawCalendarEvent[] = [];
-  const bustUrl = `${FF_ENDPOINTS.thisweek}?t=${Date.now()}`;
-  try {
-    const response = await axios.get<RawCalendarEvent[]>(bustUrl, {
-      timeout: 10000,
-      headers: {
-        'Accept': 'application/json',
-        'Cache-Control': 'no-cache, no-store',
-        'Pragma': 'no-cache',
-        'User-Agent': 'Mozilla/5.0 (compatible; ForexFundamentalAnalyzer/1.0)',
-      },
-    });
-    if (Array.isArray(response.data)) rawEvents = response.data;
-    const withActuals = rawEvents.filter(e => e.actual && e.actual.trim() !== '').length;
-    console.log(`[refreshActuals] FF returned ${rawEvents.length} events, ${withActuals} with actuals`);
+  // Secondary lookup: `${currency}_${UTCHour}` → DBEvent[]  (for TV fuzzy matching)
+  // event_time from Supabase is always UTC (TIMESTAMPTZ stored as ISO with offset/Z)
+  const hourLookup = new Map<string, DBEvent[]>();
+  for (const evt of dbEvents) {
+    const utcHour = new Date(evt.event_time).toISOString().slice(0, 13); // "2026-04-07T12"
+    const key = `${evt.currency}_${utcHour}`;
+    const arr = hourLookup.get(key) ?? [];
+    arr.push(evt);
+    hourLookup.set(key, arr);
+  }
 
-    // If FF has no actuals at all, try TradingView as a secondary source
-    if (withActuals === 0) {
-      const tvEvents = await fetchTradingViewActuals();
-      if (tvEvents.length > 0) {
-        console.log(`[refreshActuals] TradingView fallback: ${tvEvents.length} events with actuals`);
-        // Merge TV actuals into rawEvents by matching title + date prefix
-        for (const tv of tvEvents) {
-          const match = rawEvents.find(r =>
-            r.country === tv.country &&
-            r.title === tv.title &&
-            r.date.slice(0, 10) === tv.date.slice(0, 10)
+  console.log(`[refreshActuals] ${dbEvents.length} events in window — fetching FF JSON...`);
+
+  // ── 2. Try Forex Factory JSON (thisweek + nextweek) ─────────────────
+  let ffUpdated = 0;
+  let ffHasActuals = false;
+
+  for (const endpoint of [FF_ENDPOINTS.thisweek, FF_ENDPOINTS.nextweek]) {
+    try {
+      const bustUrl = `${endpoint}?t=${Date.now()}`;
+      const response = await axios.get<RawCalendarEvent[]>(bustUrl, {
+        timeout: 10000,
+        headers: {
+          'Accept': 'application/json',
+          'Cache-Control': 'no-cache, no-store',
+          'Pragma': 'no-cache',
+          'User-Agent': 'Mozilla/5.0 (compatible; ForexFundamentalAnalyzer/1.0)',
+        },
+      });
+
+      if (!Array.isArray(response.data)) continue;
+      const rawEvents = response.data;
+      const withActuals = rawEvents.filter(e => e.actual?.trim()).length;
+      console.log(`[refreshActuals] FF (${endpoint.includes('next') ? 'next' : 'this'}week): ${rawEvents.length} events, ${withActuals} with actuals`);
+
+      if (withActuals > 0) ffHasActuals = true;
+
+      for (const raw of rawEvents) {
+        if (!raw.actual?.trim()) continue;
+        const currency = COUNTRY_TO_CURRENCY[raw.country] as Currency;
+        if (!currency) continue;
+
+        const event_id = makeEventId({ currency, event_name: raw.title, event_time: raw.date });
+        const dbEvent = idLookup.get(event_id);
+        if (!dbEvent || dbEvent.actual === raw.actual) continue;
+
+        const actual_num   = parseEventValue(raw.actual);
+        const forecast_num = parseEventValue(raw.forecast ?? null) ?? dbEvent.forecast_num;
+        const previous_num = parseEventValue(raw.previous ?? null);
+        const { value: surprise_value, pct: surprise_pct } = calculateSurprise(actual_num, forecast_num);
+
+        console.log(`[refreshActuals] FF patch: ${event_id} → "${raw.actual}"`);
+        const { error: updateErr } = await db.from(TABLES.ECONOMIC_EVENTS).update({
+          actual:       raw.actual,
+          actual_num,
+          forecast:     raw.forecast   || null,
+          forecast_num: forecast_num   ?? null,
+          previous:     raw.previous   || null,
+          previous_num: previous_num   ?? null,
+          surprise_value,
+          surprise_pct,
+          is_released: true,
+          updated_at:   new Date().toISOString(),
+        }).eq('id', dbEvent.id);
+
+        if (!updateErr) ffUpdated++;
+        else console.error(`[refreshActuals] FF update failed: ${updateErr.message}`);
+      }
+    } catch (err) {
+      console.warn(`[refreshActuals] FF fetch error (${endpoint}): ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  // ── 3. TradingView fallback when FF CDN has zero actuals ─────────────
+  let tvUpdated = 0;
+  if (!ffHasActuals) {
+    console.log('[refreshActuals] FF has 0 actuals — trying TradingView fallback...');
+    const tvEvents = await fetchTradingViewActuals();
+
+    const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    for (const tv of tvEvents) {
+      if (!tv.currency) continue;
+
+      // Match by currency + UTC hour (±1 h tolerance for any timezone edge cases)
+      let matched = false;
+      const tvTime = new Date(tv.date);
+
+      for (let offset = 0; offset <= 1 && !matched; offset++) {
+        for (const sign of [1, -1]) {
+          const checkTime = new Date(tvTime.getTime() + sign * offset * 3600 * 1000);
+          const hourKey = `${tv.currency}_${checkTime.toISOString().slice(0, 13)}`;
+          const candidates = hourLookup.get(hourKey) ?? [];
+          if (candidates.length === 0) continue;
+
+          let dbEvent: DBEvent | undefined;
+          if (candidates.length === 1) {
+            dbEvent = candidates[0]; // unambiguous match
+          } else {
+            // Multiple events in same hour — fuzzy title match
+            const tvNorm = normalize(tv.title);
+            dbEvent = candidates.find(c => {
+              const dbNorm = normalize(c.event_name);
+              // Match if either string contains the first 8 chars of the other
+              const minLen = Math.min(tvNorm.length, dbNorm.length, 10);
+              return (
+                tvNorm.slice(0, minLen) === dbNorm.slice(0, minLen) ||
+                tvNorm.includes(dbNorm.slice(0, minLen)) ||
+                dbNorm.includes(tvNorm.slice(0, minLen))
+              );
+            });
+          }
+
+          if (!dbEvent) continue;
+          matched = true;
+
+          if (dbEvent.actual === tv.actual) break; // already up to date
+
+          const actual_num = parseEventValue(tv.actual);
+          const { value: surprise_value, pct: surprise_pct } = calculateSurprise(
+            actual_num,
+            dbEvent.forecast_num
           );
-          if (match && !match.actual) match.actual = tv.actual;
+
+          console.log(`[TV patch] ${dbEvent.event_id} → "${tv.actual}" (matched "${tv.title}")`);
+          const { error: updateErr } = await db.from(TABLES.ECONOMIC_EVENTS).update({
+            actual: tv.actual,
+            actual_num,
+            surprise_value,
+            surprise_pct,
+            is_released: true,
+            updated_at: new Date().toISOString(),
+          }).eq('id', dbEvent.id);
+
+          if (!updateErr) tvUpdated++;
+          else console.error(`[refreshActuals] TV update failed: ${updateErr.message}`);
+          break;
         }
       }
     }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error('[refreshActuals] FF fetch failed:', msg);
-    throw err;
   }
 
-  let updated = 0;
-
-  // Step 4: For each FF event that has an actual, update DB if different
-  for (const raw of rawEvents) {
-    if (!raw.actual || raw.actual.trim() === '') continue;
-
-    const currency = COUNTRY_TO_CURRENCY[raw.country] as Currency;
-    if (!currency) continue;
-
-    const event_id = makeEventId({
-      currency,
-      event_name: raw.title,
-      event_time: raw.date,
-    });
-
-    const dbEvent = dbLookup.get(event_id);
-    if (!dbEvent) continue;  // event not in our recent window
-
-    // Skip if already up to date
-    if (dbEvent.actual === raw.actual) continue;
-
-    const actual_num   = parseEventValue(raw.actual);
-    const forecast_num = parseEventValue(raw.forecast ?? null);
-    const previous_num = parseEventValue(raw.previous ?? null);
-    const { value: surprise_value, pct: surprise_pct } = calculateSurprise(actual_num, forecast_num);
-
-    console.log(`[refreshActuals] Patching ${event_id}: null → "${raw.actual}"`);
-
-    const { error: updateErr } = await db.from(TABLES.ECONOMIC_EVENTS).update({
-      actual: raw.actual,
-      actual_num,
-      forecast: raw.forecast || null,
-      forecast_num,
-      previous: raw.previous || null,
-      previous_num,
-      surprise_value,
-      surprise_pct,
-      is_released: true,
-      updated_at: new Date().toISOString(),
-    }).eq('id', dbEvent.id);
-
-    if (updateErr) {
-      console.error(`[refreshActuals] Update failed for ${event_id}:`, updateErr.message);
-    } else {
-      updated++;
-    }
-  }
-
-  console.log(`[refreshActuals] Checked ${recentEvents.length} events, patched ${updated}`);
-  return { updated, checked: recentEvents.length };
+  const totalUpdated = ffUpdated + tvUpdated;
+  console.log(
+    `[refreshActuals] Done. FF patched: ${ffUpdated}, TV patched: ${tvUpdated}, ` +
+    `total: ${totalUpdated}/${dbEvents.length} events checked`
+  );
+  return { updated: totalUpdated, checked: dbEvents.length };
 }
 
 // -----------------------------------------------------------------------
@@ -398,55 +463,79 @@ export async function getRecentReleases(hoursBack = 24): Promise<EconomicEvent[]
 
 // -----------------------------------------------------------------------
 // TRADINGVIEW ECONOMIC CALENDAR FALLBACK
-// Used when FF JSON has zero actuals (CDN cache issue or feed delay).
 // TV's public calendar API returns near-real-time data.
+// TV uses 2-letter country codes (US, GB, EU, JP…) which map directly
+// to our Currency codes — no intermediate FF country name needed.
 // -----------------------------------------------------------------------
 interface TVEvent {
-  title: string;
-  country: string;
-  date: string;
-  actual: string;
+  title:    string;
+  currency: Currency | null;  // derived from TV country code
+  date:     string;           // UTC ISO string returned by TV
+  actual:   string;
 }
 
+// TradingView 2-letter country code → our Currency
+const TV_TO_CURRENCY: Record<string, Currency> = {
+  US: 'USD', EU: 'EUR', GB: 'GBP', JP: 'JPY',
+  AU: 'AUD', CA: 'CAD', NZ: 'NZD', CH: 'CHF',
+  // Euro-area countries all map to EUR
+  DE: 'EUR', FR: 'EUR', IT: 'EUR', ES: 'EUR',
+};
+
 async function fetchTradingViewActuals(): Promise<TVEvent[]> {
-  const now = new Date();
+  const now  = new Date();
   const from = new Date(now.getTime() - 48 * 3600 * 1000);
-  const toStr = now.toISOString().slice(0, 19) + 'Z';
+  const toStr   = now.toISOString().slice(0, 19) + 'Z';
   const fromStr = from.toISOString().slice(0, 19) + 'Z';
 
-  // TradingView public economic calendar API (no key needed)
+  // TradingView public economic calendar API (no API key required)
   const url = `https://economic-calendar.tradingview.com/events?from=${fromStr}&to=${toStr}&countries=US,EU,GB,JP,AU,CA,NZ,CH`;
 
   try {
     const resp = await axios.get(url, {
-      timeout: 8000,
+      timeout: 10000,
       headers: {
         'Accept': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Origin': 'https://www.tradingview.com',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Origin':  'https://www.tradingview.com',
         'Referer': 'https://www.tradingview.com/',
       },
     });
 
     const data = resp.data;
+
+    // Response format: { result: [ { title, country, date, actual, forecast, previous, ... } ] }
+    // Fallback: data might itself be an array
+    const rows: Array<Record<string, unknown>> = Array.isArray(data?.result)
+      ? data.result
+      : Array.isArray(data)
+      ? data
+      : [];
+
+    console.log(`[TV fallback] ${rows.length} rows from TradingView`);
+    if (rows.length > 0) {
+      // Log first row for debugging purposes
+      console.log(`[TV fallback] Sample: ${JSON.stringify(rows[0]).slice(0, 200)}`);
+    }
+
     const events: TVEvent[] = [];
-
-    // TV response format: { result: [ { title, country, date, actual, ... } ] }
-    const rows: Array<Record<string, unknown>> = Array.isArray(data?.result) ? data.result : [];
     for (const row of rows) {
-      const actual = (row.actual as string | null) ?? '';
-      if (!actual || actual === '') continue;
+      const actual = String(row.actual ?? '').trim();
+      if (!actual) continue;
 
-      // Map TV country codes to FF country names
-      const country = TV_COUNTRY_MAP[row.country as string] ?? (row.country as string);
+      // TV uses ISO 2-letter country codes — map directly to our Currency
+      const currency = TV_TO_CURRENCY[String(row.country ?? '')] ?? null;
+      if (!currency) continue;
+
       events.push({
-        title: (row.title as string) ?? '',
-        country,
-        date: (row.date as string) ?? '',
+        title:    String(row.title ?? ''),
+        currency,
+        date:     String(row.date  ?? ''),
         actual,
       });
     }
-    console.log(`[TV fallback] ${events.length} events with actuals from TradingView`);
+
+    console.log(`[TV fallback] ${events.length} events have actuals`);
     return events;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -454,13 +543,6 @@ async function fetchTradingViewActuals(): Promise<TVEvent[]> {
     return [];
   }
 }
-
-// TradingView country codes → FF country names
-const TV_COUNTRY_MAP: Record<string, string> = {
-  US: 'United States', EU: 'Euro Zone', GB: 'United Kingdom',
-  JP: 'Japan', AU: 'Australia', CA: 'Canada', NZ: 'New Zealand', CH: 'Switzerland',
-  DE: 'Germany', FR: 'France', IT: 'Italy', ES: 'Spain',
-};
 
 // Get recent events for a specific currency (for scoring)
 export async function getRecentEventsForCurrency(
