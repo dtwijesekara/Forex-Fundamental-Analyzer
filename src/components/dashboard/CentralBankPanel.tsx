@@ -6,17 +6,47 @@
 // Data comes from currencies[].cb_bias — no extra API call.
 // ============================================================
 
+import { useState, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { cn } from '@/lib/utils';
 import { CURRENCY_FLAGS } from '@/lib/constants';
-import { TrendingUp, TrendingDown, Minus, Calendar } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Calendar, RefreshCw } from 'lucide-react';
 import type { CurrencyScore, Currency, CBBiasLabel, RateTrend } from '@/types';
 
 interface CentralBankPanelProps {
   currencies: CurrencyScore[];
+  onRefreshDone?: () => void; // optional: notify parent to re-fetch analysis
 }
 
-export function CentralBankPanel({ currencies }: CentralBankPanelProps) {
+export function CentralBankPanel({ currencies, onRefreshDone }: CentralBankPanelProps) {
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+  const [refreshResult, setRefreshResult] = useState<string | null>(null);
+
+  const handleRefresh = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    setRefreshResult(null);
+    try {
+      const res = await fetch('/api/central-banks/refresh', { method: 'POST' });
+      const json = await res.json();
+      if (json.success) {
+        setLastRefreshed(new Date());
+        setRefreshResult(json.updated > 0
+          ? `Updated ${json.updated} bank${json.updated !== 1 ? 's' : ''}`
+          : 'Already current'
+        );
+        onRefreshDone?.();
+      } else {
+        setRefreshResult('Error: ' + (json.error ?? 'unknown'));
+      }
+    } catch {
+      setRefreshResult('Network error');
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshing, onRefreshDone]);
+
   // Sort: currencies with cb_bias first (by bias_score), others by score
   const sorted = [...currencies].sort((a, b) => {
     const aScore = a.cb_bias?.bias_score ?? (a.score_cb / 5);
@@ -24,13 +54,37 @@ export function CentralBankPanel({ currencies }: CentralBankPanelProps) {
     return bScore - aScore;
   });
 
+  // Derive latest update time from CB data
+  const latestUpdate = currencies.reduce<Date | null>((best, c) => {
+    if (!c.cb_bias?.updated_at) return best;
+    const d = new Date(c.cb_bias.updated_at);
+    return !best || d > best ? d : best;
+  }, null);
+
   if (sorted.length === 0) return null;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Central Banks</CardTitle>
-        <span className="text-[10px] text-slate-600">Monetary policy stances</span>
+        <div className="flex items-center gap-2 ml-auto">
+          {(refreshResult || latestUpdate) && (
+            <span className="text-[9px] text-slate-600">
+              {refreshResult ?? (latestUpdate ? `Updated ${formatRelativeTime(latestUpdate)}` : '')}
+            </span>
+          )}
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            title="Refresh CB rates from collected events"
+            className={cn(
+              'p-1 rounded hover:bg-white/10 transition-colors text-slate-500 hover:text-slate-300',
+              refreshing && 'opacity-50 cursor-wait'
+            )}
+          >
+            <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} />
+          </button>
+        </div>
       </CardHeader>
       <CardContent className="p-0">
         <div className="divide-y divide-white/[0.04]">
@@ -177,6 +231,15 @@ function getTrendStyle(trend: RateTrend): {
 }
 
 function formatBiasLabel(label: CBBiasLabel): string {
-  // Shorten long labels: "Aggressive Hawkish" → "Agg. Hawkish"
   return label.replace('Aggressive ', 'Agg. ');
+}
+
+function formatRelativeTime(date: Date): string {
+  const diffMs = Date.now() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  return `${Math.floor(diffHours / 24)}d ago`;
 }

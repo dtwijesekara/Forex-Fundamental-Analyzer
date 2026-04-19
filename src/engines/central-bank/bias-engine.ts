@@ -161,17 +161,17 @@ export function calculateRateOutlookScore(bias: CentralBankBias, maxContribution
 // GET CURRENT POLICY RATES (approximate, for reference)
 // -----------------------------------------------------------------------
 export function getApproximateCurrentRates(): Record<Currency, number> {
-  // These should be kept updated, ideally from CB bias table
-  // Hard-coded fallback reference rates
+  // Fallback reference rates — updated to approximate mid-2025 levels.
+  // The refreshCentralBankRates() job keeps the DB current; these are last-resort defaults.
   return {
-    USD: 5.25,
-    EUR: 4.00,
-    GBP: 5.25,
-    JPY: 0.10,
-    AUD: 4.35,
-    CAD: 4.75,
-    NZD: 5.50,
-    CHF: 1.25,
+    USD: 4.33,  // Fed cut to 4.25-4.50% range in late 2024
+    EUR: 2.50,  // ECB cut aggressively through 2024-2025
+    GBP: 4.50,  // BoE cut gradually
+    JPY: 0.50,  // BoJ raised slowly from negative rates
+    AUD: 4.10,  // RBA cut in early 2025
+    CAD: 2.75,  // BoC cut aggressively
+    NZD: 3.50,  // RBNZ cut cycle
+    CHF: 0.25,  // SNB cut to near-zero
   };
 }
 

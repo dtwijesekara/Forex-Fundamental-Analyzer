@@ -16,6 +16,7 @@ import { runAlertCheck } from '../src/engines/alerts/alert-engine';
 import { generateEventRiskWarnings } from '../src/engines/risk/event-risk';
 import { collectForexNews } from '../src/engines/news/collector';
 import { refreshActuals } from '../src/engines/calendar/collector';
+import { refreshCentralBankRates } from '../src/engines/central-bank/rate-updater';
 
 // ─────────────────────────────────────────────────────────────
 // SCHEDULE CONFIGURATION
@@ -39,11 +40,15 @@ const SCHEDULE = {
 
   // Fast actuals patch: every 5 minutes (surgical T1/T2 actual value refresh)
   FAST_ACTUALS: process.env.WORKER_CRON_FAST_ACTUALS || '*/5 * * * *',
+
+  // CB rate auto-update: every 30 minutes (rate decisions happen ~8x/year per bank)
+  CB_RATES: process.env.WORKER_CRON_CB_RATES || '*/30 * * * *',
 };
 
 let isAnalysisRunning = false;
 let isAlertRunning = false;
 let isActualsRunning = false;
+let isCBRatesRunning = false;
 
 // ─────────────────────────────────────────────────────────────
 // FULL ANALYSIS JOB
@@ -138,6 +143,24 @@ async function fastActualsJob(): Promise<void> {
 }
 
 // ─────────────────────────────────────────────────────────────
+// CB RATE REFRESH JOB — detects rate decisions and updates CB bias
+// ─────────────────────────────────────────────────────────────
+async function cbRatesJob(): Promise<void> {
+  if (isCBRatesRunning || isAnalysisRunning) return;
+  isCBRatesRunning = true;
+
+  try {
+    const result = await safe('cb-rates', () => refreshCentralBankRates());
+    if (result && result.updated > 0) {
+      log(`CB rates: updated ${result.updated}/${result.checked} currencies — re-scoring...`);
+      await safe('currency-scoring-cb', () => scoreAllCurrencies());
+    }
+  } finally {
+    isCBRatesRunning = false;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 // SAFE WRAPPER — catches errors without crashing the scheduler
 // ─────────────────────────────────────────────────────────────
 async function safe<T>(name: string, fn: () => Promise<T>): Promise<T | null> {
@@ -169,6 +192,7 @@ function start(): void {
   log(`Intermarket:   ${SCHEDULE.INTERMARKET}`);
   log(`News:          ${SCHEDULE.NEWS}`);
   log(`Fast actuals:  ${SCHEDULE.FAST_ACTUALS}`);
+  log(`CB rates:      ${SCHEDULE.CB_RATES}`);
   log('='.repeat(50));
 
   // Schedule full analysis
@@ -196,10 +220,16 @@ function start(): void {
     fastActualsJob().catch(err => log(`Unhandled error in fast-actuals job: ${err.message}`));
   }, { timezone: 'UTC' });
 
+  // Schedule CB rate auto-updates
+  cron.schedule(SCHEDULE.CB_RATES, () => {
+    cbRatesJob().catch(err => log(`Unhandled error in cb-rates job: ${err.message}`));
+  }, { timezone: 'UTC' });
+
   // Run once immediately on startup
   log('Running initial analysis on startup...');
   fullAnalysisJob().catch(err => log(`Startup analysis error: ${err.message}`));
   newsJob().catch(err => log(`Startup news error: ${err.message}`));
+  cbRatesJob().catch(err => log(`Startup CB rates error: ${err.message}`));
 }
 
 // Handle graceful shutdown
