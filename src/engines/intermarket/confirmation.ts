@@ -10,26 +10,29 @@ import { createAdminClient, TABLES } from '@/lib/supabase';
 // Returns CSV: Symbol,Date,Time,Open,High,Low,Close,Volume
 // Change% is approximated from open→close of latest bar.
 //
-// Stooq symbols confirmed working (tested 2026-04):
-const STOOQ_MAP: Record<string, { symbol: string; invertDirection?: boolean }> = {
-  'DX-Y.NYB': { symbol: 'dx.f'  },         // Dollar index futures
-  'GC=F':     { symbol: 'gc.f'  },         // Gold futures
-  'CL=F':     { symbol: 'cl.f'  },         // WTI Oil futures
-  '^GSPC':    { symbol: '^spx'  },         // S&P 500
-  '^VIX':     { symbol: 'vx.f'  },         // VIX futures (proxy for spot VIX)
-  // US 10Y: ZN futures (bond price) — rises when yields FALL → invert direction
-  '^TNX':     { symbol: 'zn.f', invertDirection: true },
+// Stooq symbols confirmed working (tested 2026-04-17):
+const STOOQ_MAP: Record<string, string> = {
+  'DX-Y.NYB': 'dx.f',   // Dollar index futures  → ~97.90  ✓
+  'GC=F':     'gc.f',   // Gold futures           → ~4879   ✓
+  'CL=F':     'cl.f',   // WTI Oil futures        → ~83.85  ✓
+  '^GSPC':    '^spx',   // S&P 500                → ~7126   ✓
 };
 
-async function fetchQuote(yahooSymbol: string): Promise<{
-  regularMarketPrice?: number | null;
-  regularMarketChangePercent?: number | null;
-} | null> {
-  const cfg = STOOQ_MAP[yahooSymbol];
-  if (!cfg) return null;
+// ── FRED (Federal Reserve Economic Data) — official, free, no API key ────
+// Used for VIX and US 10Y yield. Stooq VX.F returns VIX *futures* (≈96
+// while spot VIX is ≈18), and Stooq ZN.F returns bond price (≈111) not
+// the yield (≈4.32%). FRED VIXCLS and DGS10 are the correct series.
+const FRED_MAP: Record<string, string> = {
+  '^VIX': 'VIXCLS',  // CBOE Volatility Index (spot, daily close)
+  '^TNX': 'DGS10',   // 10-Year Treasury Constant Maturity Rate (yield %)
+};
 
-  const url = `https://stooq.com/q/l/?s=${encodeURIComponent(cfg.symbol)}&f=sd2t2ohlcv&h&e=csv`;
-  const res  = await fetch(url, {
+async function fetchStooqQuote(stooqSymbol: string): Promise<{
+  regularMarketPrice: number | null;
+  regularMarketChangePercent: number | null;
+} | null> {
+  const url = `https://stooq.com/q/l/?s=${encodeURIComponent(stooqSymbol)}&f=sd2t2ohlcv&h&e=csv`;
+  const res = await fetch(url, {
     headers: { 'User-Agent': 'Mozilla/5.0 (compatible; FXAnalyzer/1.0)' },
   });
   if (!res.ok) return null;
@@ -38,20 +41,57 @@ async function fetchQuote(yahooSymbol: string): Promise<{
   const lines = text.trim().split('\n');
   if (lines.length < 2) return null;
 
-  const parts     = lines[1].split(',');
-  const close     = parseFloat(parts[6]);
-  const open      = parseFloat(parts[3]);
+  const parts = lines[1].split(',');
+  const close = parseFloat(parts[6]);
+  const open  = parseFloat(parts[3]);
 
-  if (isNaN(close) || !isFinite(close)) return null;
+  if (isNaN(close) || !isFinite(close) || close <= 0) return null;
 
-  let changePercent = open > 0 ? ((close - open) / open) * 100 : 0;
-  // Bond price moves inverse to yield — flip sign for TNX equivalent
-  if (cfg.invertDirection) changePercent = -changePercent;
-
+  const changePercent = open > 0 ? ((close - open) / open) * 100 : 0;
   return {
     regularMarketPrice:         close,
     regularMarketChangePercent: Number(changePercent.toFixed(3)),
   };
+}
+
+async function fetchFREDQuote(seriesId: string): Promise<{
+  regularMarketPrice: number | null;
+  regularMarketChangePercent: number | null;
+} | null> {
+  const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${seriesId}`;
+  const res = await fetch(url, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; FXAnalyzer/1.0)' },
+  });
+  if (!res.ok) return null;
+
+  const text  = await res.text();
+  // Filter header row and rows with missing data ('.')
+  const rows  = text.trim().split('\n')
+    .slice(1)                                   // skip header
+    .filter(l => !l.endsWith(',.') && l.trim()); // drop missing-value rows
+
+  if (rows.length < 2) return null;
+
+  const parsePair = (row: string) => parseFloat(row.split(',')[1]);
+  const current  = parsePair(rows[rows.length - 1]);
+  const previous = parsePair(rows[rows.length - 2]);
+
+  if (isNaN(current) || isNaN(previous) || previous === 0) return null;
+
+  const changePercent = ((current - previous) / previous) * 100;
+  return {
+    regularMarketPrice:         current,
+    regularMarketChangePercent: Number(changePercent.toFixed(3)),
+  };
+}
+
+async function fetchQuote(yahooSymbol: string): Promise<{
+  regularMarketPrice?: number | null;
+  regularMarketChangePercent?: number | null;
+} | null> {
+  if (FRED_MAP[yahooSymbol]) return fetchFREDQuote(FRED_MAP[yahooSymbol]);
+  if (STOOQ_MAP[yahooSymbol]) return fetchStooqQuote(STOOQ_MAP[yahooSymbol]);
+  return null;
 }
 import { INTERMARKET_SYMBOLS } from '@/lib/constants';
 import type { Currency, IntermarketData, IntermarketSnapshot, MarketSymbol } from '@/types';
