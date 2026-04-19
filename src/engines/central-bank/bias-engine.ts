@@ -163,15 +163,16 @@ export function calculateRateOutlookScore(bias: CentralBankBias, maxContribution
 export function getApproximateCurrentRates(): Record<Currency, number> {
   // Fallback reference rates — updated to approximate mid-2025 levels.
   // The refreshCentralBankRates() job keeps the DB current; these are last-resort defaults.
+  // Verified April 2026 rates. refreshCentralBankRates() will keep DB current.
   return {
-    USD: 4.33,  // Fed cut to 4.25-4.50% range in late 2024
-    EUR: 2.50,  // ECB cut aggressively through 2024-2025
-    GBP: 4.50,  // BoE cut gradually
-    JPY: 0.50,  // BoJ raised slowly from negative rates
-    AUD: 4.10,  // RBA cut in early 2025
-    CAD: 2.75,  // BoC cut aggressively
+    USD: 3.625, // Fed cut to 3.50–3.75% range
+    EUR: 2.00,  // ECB deposit facility rate
+    GBP: 3.75,  // BoE base rate
+    JPY: 0.75,  // BoJ hiked
+    AUD: 4.10,  // RBA hiked in March 2026
+    CAD: 2.75,  // BoC cut cycle
     NZD: 3.50,  // RBNZ cut cycle
-    CHF: 0.25,  // SNB cut to near-zero
+    CHF: 0.25,  // SNB near-zero
   };
 }
 
