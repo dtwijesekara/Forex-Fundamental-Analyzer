@@ -1,0 +1,12 @@
+name = "fx-analyzer-cron"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+# Only 1 cron trigger needed — the worker dispatches all jobs internally
+# based on the current UTC minute.
+[triggers]
+crons = ["*/5 * * * *"]
+
+# Secrets (set via: wrangler secret put CRON_SECRET)
+# - CRON_SECRET  : same value as your Vercel CRON_SECRET env var
+# - APP_URL      : your Vercel deployment URL, e.g. https://your-app.vercel.app

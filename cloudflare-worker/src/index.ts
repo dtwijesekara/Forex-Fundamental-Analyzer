@@ -1,0 +1,77 @@
+// ============================================================
+// CLOUDFLARE WORKER — FX Analyzer Cron Scheduler
+// Replaces Railway background worker entirely.
+// One cron trigger (*/5 * * * *) dispatches all jobs based
+// on the current UTC minute, so only 1 Cron Trigger is needed.
+//
+// Free tier: 100k req/day, 30s CPU/cron, unlimited cron triggers
+// Deploy: wrangler deploy (from cloudflare-worker/ directory)
+// Secrets: wrangler secret put CRON_SECRET
+//          wrangler secret put APP_URL
+// ============================================================
+
+interface Env {
+  CRON_SECRET: string;
+  APP_URL: string;        // e.g. https://your-app.vercel.app
+}
+
+export default {
+  // ── CRON HANDLER ────────────────────────────────────────────
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    const now    = new Date();
+    const minute = now.getUTCMinutes();
+    const hour   = now.getUTCHours();
+
+    const headers = {
+      'Authorization': `Bearer ${env.CRON_SECRET}`,
+      'User-Agent':    'FXAnalyzer-CronWorker/1.0',
+    };
+
+    const calls: Promise<Response>[] = [];
+    const hit = (path: string) =>
+      fetch(`${env.APP_URL}${path}`, { method: 'GET', headers });
+
+    // ── Every 5 min: fast actuals patch ─────────────────────
+    calls.push(hit('/api/cron/actuals'));
+
+    // ── Every 10 min: intermarket prices ────────────────────
+    if (minute % 10 === 0) calls.push(hit('/api/cron/intermarket'));
+
+    // ── Every 15 min: alerts ────────────────────────────────
+    if (minute % 15 === 0) calls.push(hit('/api/cron/alerts'));
+
+    // ── Every 20 min: news ──────────────────────────────────
+    if (minute % 20 === 0) calls.push(hit('/api/cron/news'));
+
+    // ── Every 30 min: full analysis ─────────────────────────
+    if (minute % 30 === 0) calls.push(hit('/api/cron/analysis'));
+
+    // ── Every 6 h (at :15 past): CB rate auto-update ────────
+    if (minute === 15 && hour % 6 === 0) calls.push(hit('/api/cron/cb-rates'));
+
+    // Fire all calls — don't block the Worker on Vercel's response time
+    ctx.waitUntil(
+      Promise.allSettled(calls).then(results => {
+        results.forEach((r, i) => {
+          if (r.status === 'rejected') {
+            console.error(`[Cron] Call ${i} failed:`, r.reason);
+          } else {
+            console.log(`[Cron] Call ${i} → HTTP ${r.value.status}`);
+          }
+        });
+      })
+    );
+  },
+
+  // ── HTTP HANDLER (health check) ──────────────────────────
+  async fetch(_req: Request, env: Env): Promise<Response> {
+    return new Response(JSON.stringify({
+      service: 'FX Analyzer Cron Worker',
+      status:  'running',
+      app_url: env.APP_URL ? '✓ set' : '✗ missing',
+      secret:  env.CRON_SECRET ? '✓ set' : '✗ missing',
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  },
+};
