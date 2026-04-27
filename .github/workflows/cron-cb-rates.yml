@@ -1,0 +1,22 @@
+name: Cron — CB Rates
+
+on:
+  schedule:
+    - cron: '15 */6 * * *'   # every 6 hours (CB decisions are infrequent)
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Auto-update central bank rates from released rate decisions
+        run: |
+          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -X GET \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            --max-time 120 \
+            "${{ secrets.APP_URL }}/api/cron/cb-rates")
+          echo "HTTP $HTTP_CODE"
+          cat /tmp/response.json
+          [ "$HTTP_CODE" = "200" ] || exit 1

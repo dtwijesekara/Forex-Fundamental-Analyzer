@@ -1,0 +1,22 @@
+name: Cron — News
+
+on:
+  schedule:
+    - cron: '*/20 * * * *'   # every 20 minutes
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Collect forex news articles
+        run: |
+          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -X GET \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            --max-time 120 \
+            "${{ secrets.APP_URL }}/api/cron/news")
+          echo "HTTP $HTTP_CODE"
+          cat /tmp/response.json
+          [ "$HTTP_CODE" = "200" ] || exit 1

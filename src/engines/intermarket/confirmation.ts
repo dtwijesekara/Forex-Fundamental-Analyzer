@@ -112,32 +112,33 @@ export async function fetchAndStoreIntermarketData(): Promise<IntermarketSnapsho
     [INTERMARKET_SYMBOLS.US10Y]: { key: 'us10y', symbol: 'US10Y' },
   };
 
-  for (const [yahooSymbol, { key, symbol }] of Object.entries(symbolMap)) {
-    try {
-      const quote = await fetchQuote(yahooSymbol);
-      if (!quote) continue;
+  // Fetch all symbols in parallel for speed (~5s instead of ~25s sequential)
+  await Promise.all(
+    Object.entries(symbolMap).map(async ([yahooSymbol, { key, symbol }]) => {
+      try {
+        const quote = await fetchQuote(yahooSymbol);
+        if (!quote) return;
 
-      const price = quote.regularMarketPrice ?? null;
-      const change1d = quote.regularMarketChangePercent ?? null;
-      const direction = getDirection(change1d);
+        const price = quote.regularMarketPrice ?? null;
+        const change1d = quote.regularMarketChangePercent ?? null;
+        const direction = getDirection(change1d);
 
-      const record: Omit<IntermarketData, 'id'> = {
-        symbol,
-        price,
-        change_1d: change1d ? Number(change1d.toFixed(3)) : null,
-        change_5d: null,  // could compute from history if needed
-        direction,
-        fetched_at: new Date().toISOString(),
-      };
+        const record: Omit<IntermarketData, 'id'> = {
+          symbol,
+          price,
+          change_1d: change1d ? Number(change1d.toFixed(3)) : null,
+          change_5d: null,
+          direction,
+          fetched_at: new Date().toISOString(),
+        };
 
-      // Insert into DB
-      await db.from(TABLES.INTERMARKET_DATA).insert(record);
-
-      snapshot[key] = { ...record, fetched_at: new Date().toISOString() };
-    } catch (err) {
-      console.warn(`[Intermarket] Failed to fetch ${yahooSymbol}:`, err instanceof Error ? err.message : err);
-    }
-  }
+        await db.from(TABLES.INTERMARKET_DATA).insert(record);
+        snapshot[key] = { ...record, fetched_at: new Date().toISOString() };
+      } catch (err) {
+        console.warn(`[Intermarket] Failed to fetch ${yahooSymbol}:`, err instanceof Error ? err.message : err);
+      }
+    })
+  );
 
   return snapshot as IntermarketSnapshot;
 }
