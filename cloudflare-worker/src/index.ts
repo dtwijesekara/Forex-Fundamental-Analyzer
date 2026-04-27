@@ -12,7 +12,8 @@
 
 interface Env {
   CRON_SECRET: string;
-  APP_URL: string;        // e.g. https://your-app.vercel.app
+  APP_URL: string;                   // e.g. https://your-app.vercel.app
+  VERCEL_BYPASS_SECRET?: string;     // optional: Vercel deployment protection bypass
 }
 
 export default {
@@ -32,10 +33,14 @@ export default {
 
     console.log(`[Cron] Fired at ${now.toISOString()} — minute=${minute} hour=${hour} base=${baseUrl}`);
 
-    const headers = {
+    const headers: Record<string, string> = {
       'Authorization': `Bearer ${env.CRON_SECRET}`,
       'User-Agent':    'FXAnalyzer-CronWorker/1.0',
     };
+    // Bypass Vercel Deployment Protection if secret is set
+    if (env.VERCEL_BYPASS_SECRET) {
+      headers['x-vercel-protection-bypass'] = env.VERCEL_BYPASS_SECRET;
+    }
 
     const calls: Promise<Response>[] = [];
     const hit = (path: string) => {
