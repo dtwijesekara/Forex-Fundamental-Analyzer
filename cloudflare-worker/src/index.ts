@@ -18,9 +18,19 @@ interface Env {
 export default {
   // ── CRON HANDLER ────────────────────────────────────────────
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    if (!env.APP_URL || !env.CRON_SECRET) {
+      console.error('[Cron] Missing APP_URL or CRON_SECRET secrets — run: wrangler secret put APP_URL');
+      return;
+    }
+
+    // Strip trailing slash from APP_URL if present
+    const baseUrl = env.APP_URL.replace(/\/$/, '');
+
     const now    = new Date();
     const minute = now.getUTCMinutes();
     const hour   = now.getUTCHours();
+
+    console.log(`[Cron] Fired at ${now.toISOString()} — minute=${minute} hour=${hour} base=${baseUrl}`);
 
     const headers = {
       'Authorization': `Bearer ${env.CRON_SECRET}`,
@@ -28,8 +38,10 @@ export default {
     };
 
     const calls: Promise<Response>[] = [];
-    const hit = (path: string) =>
-      fetch(`${env.APP_URL}${path}`, { method: 'GET', headers });
+    const hit = (path: string) => {
+      console.log(`[Cron] → ${baseUrl}${path}`);
+      return fetch(`${baseUrl}${path}`, { method: 'GET', headers });
+    };
 
     // ── Every 5 min: fast actuals patch ─────────────────────
     calls.push(hit('/api/cron/actuals'));
