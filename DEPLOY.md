@@ -4,12 +4,9 @@
 
 ```
 GitHub repo
-  ├── Vercel (dashboard)             — FREE
+  ├── Vercel (dashboard only)        — FREE
   │     ├── Next.js dashboard (all 5 pages)
   │     └── API routes (read-only, served on demand)
-  │
-  ├── Cloudflare Workers (dashboard, optional mirror) — FREE
-  │     └── Same Next.js app, deployed via OpenNext — see Step 2b
   │
   └── Railway (ALL scheduling)       — FREE 500h/mo
         └── node-cron scheduler
@@ -18,7 +15,7 @@ GitHub repo
               ├── Intermarket refresh every 10 min
               └── News fetch every 20 min
 
-All services read/write the same Supabase database.
+Both services read/write the same Supabase database.
 ```
 
 > **Why no Vercel cron jobs?**
@@ -26,17 +23,10 @@ All services read/write the same Supabase database.
 > every 10–30 minutes — that requires Vercel Pro ($20/month). Railway handles all
 > scheduling for free, so `vercel.json` has no crons on the free tier.
 
-> **Why NOT Cloudflare Workers for the scheduler?**
-> `workers/scheduler.ts` uses `node-cron`, a real long-running Node.js process with native
-> timers — Cloudflare Workers run V8 isolates with request/cron-trigger execution, not a
-> persistent Node process. It can't host the scheduler. Railway runs real Node.js — it
-> works perfectly for that piece.
->
-> The dashboard itself (Next.js pages + API routes) doesn't use any Node-native packages —
-> `yahoo-finance2` and `node-telegram-bot-api` are unused leftovers in `package.json`; market
-> data comes from plain `fetch()` calls to Stooq/FRED and Telegram alerts go out via `axios`
-> HTTP calls. That means the dashboard *can* also run on Cloudflare Workers via the OpenNext
-> adapter — see the optional step below. Scheduling still has to stay on Railway either way.
+> **Why NOT Cloudflare Pages?**
+> This project uses `yahoo-finance2`, `node-cron`, and `node-telegram-bot-api` — all rely
+> on Node.js native APIs (net, tls, dns). Cloudflare Workers run V8 isolates, not Node.js.
+> These packages will crash on Cloudflare. Vercel runs real Node.js — it works perfectly.
 
 ---
 
@@ -90,56 +80,6 @@ Add each of these (set scope to **Production + Preview + Development**):
 Vercel → **Deployments** → click the latest failed deploy → **Redeploy**
 
 Your dashboard will be live at `https://fx-analyzer-xxx.vercel.app`
-
----
-
-## Step 2b (Optional) — Also Deploy Dashboard to Cloudflare Workers
-
-This mirrors the *same* Next.js dashboard onto a second, free Cloudflare URL using the
-[OpenNext Cloudflare adapter](https://opennext.js.org/cloudflare) (already configured in this
-repo via `open-next.config.ts` + `wrangler.jsonc`). Railway still handles all scheduling
-either way — this step does not replace Railway or Vercel, it just adds another place the
-dashboard is reachable.
-
-### 2b.1 — Create a Cloudflare account
-Go to [dash.cloudflare.com](https://dash.cloudflare.com) → sign up (free) → note your **Account ID**
-(Workers & Pages → Overview, right sidebar).
-
-### 2b.2 — Log in with Wrangler
-```bash
-npx wrangler login
-```
-
-### 2b.3 — Set secrets
-Cloudflare Workers don't read `.env.local`. Set each secret individually:
-```bash
-npx wrangler secret put NEXT_PUBLIC_SUPABASE_URL
-npx wrangler secret put NEXT_PUBLIC_SUPABASE_ANON_KEY
-npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
-npx wrangler secret put API_SECRET
-npx wrangler secret put CRON_SECRET
-npx wrangler secret put TELEGRAM_BOT_TOKEN   # optional
-npx wrangler secret put TELEGRAM_CHAT_ID     # optional
-```
-
-### 2b.4 — Build and deploy
-```bash
-npm run cf:deploy
-```
-This runs `opennextjs-cloudflare build` (adapts the Next.js build for Workers) then
-`opennextjs-cloudflare deploy` (uploads via Wrangler). On success it prints your live
-`https://forex-fundamental-analyzer.<your-subdomain>.workers.dev` URL.
-
-### 2b.5 — Local preview (optional, before deploying)
-```bash
-npm run cf:preview
-```
-Runs the Worker build locally against Cloudflare's runtime so you can sanity-check it
-before shipping.
-
-> Re-run `npm run cf:deploy` after any push to update it — unlike Vercel/Railway, this isn't
-> wired to auto-deploy on `git push` unless you add a [Cloudflare Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/)
-> connection or a GitHub Action yourself.
 
 ---
 
@@ -276,8 +216,3 @@ If you want to drop Railway and run everything on Vercel:
 
 **"Hobby accounts are limited to daily cron jobs" error on Vercel:**
 → This is expected — `vercel.json` is now empty (`{}`). Railway handles all cron scheduling.
-
-**Cloudflare deploy fails or 500s at runtime:**
-→ Run `npx wrangler secret list` to confirm all secrets from Step 2b.3 are set — Workers
-  don't inherit `.env.local`. → Check `npx wrangler tail` while hitting the deployed URL for
-  the actual runtime error.
