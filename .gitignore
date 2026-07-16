@@ -42,8 +42,3 @@ coverage/
 
 # Misc
 .vercel
-
-# Cloudflare (OpenNext / Wrangler)
-.open-next/
-.wrangler/
-.dev.vars

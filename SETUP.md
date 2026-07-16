@@ -120,35 +120,32 @@ CURRENCY SCORES:
 
 ---
 
-## Step 6 — Deploy Dashboard to Cloudflare Workers
+## Step 6 — Deploy Dashboard to Vercel
 
 ```bash
-# Login to Cloudflare
-npx wrangler login
+# Install Vercel CLI
+npm i -g vercel
 
-# Set secrets (Workers don't read .env.local)
-npx wrangler secret put NEXT_PUBLIC_SUPABASE_URL
-npx wrangler secret put NEXT_PUBLIC_SUPABASE_ANON_KEY
-npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
-npx wrangler secret put API_SECRET
-npx wrangler secret put CRON_SECRET
-npx wrangler secret put TELEGRAM_BOT_TOKEN
-npx wrangler secret put TELEGRAM_CHAT_ID
+# Login and deploy
+vercel
 
-# Build (via OpenNext) and deploy
-npm run cf:deploy
+# Set environment variables on Vercel:
+vercel env add NEXT_PUBLIC_SUPABASE_URL
+vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY
+vercel env add SUPABASE_SERVICE_ROLE_KEY
+vercel env add API_SECRET
+vercel env add USER_TIMEZONE
+vercel env add TELEGRAM_BOT_TOKEN
+vercel env add TELEGRAM_CHAT_ID
 ```
 
-Prints a live `https://forex-fundamental-analyzer.<your-subdomain>.workers.dev` URL on success.
-See `DEPLOY.md` Step 2 for the full walkthrough, or Step 2 Alt if you'd rather use Vercel
-instead — same env vars, `vercel` CLI or dashboard-based setup.
+Or add env variables via the Vercel dashboard under Project → Settings → Environment Variables.
 
 ---
 
 ## Step 7 — Deploy Background Worker (Required for Auto-Updates)
 
-> **Important:** Cloudflare Workers and Vercel both can't run the scheduler (no persistent
-> processes on either). Deploy the worker separately, e.g. to Railway.
+> **Important:** Vercel cannot run the scheduler (no persistent processes). Deploy the worker separately.
 
 ### Option A — Railway (Recommended, free tier available)
 
@@ -195,7 +192,7 @@ Every 15 minutes (alert-only check):
 - Checks for Tier 1/2 events approaching in next 4 hours
 - Sends Telegram alerts if critical thresholds crossed
 
-Dashboard (Next.js on Cloudflare Workers):
+Dashboard (Next.js on Vercel):
 - Reads precomputed data from Supabase
 - Displays instantly (no live computation on page load)
 - Auto-refreshes every 5 minutes
@@ -210,7 +207,7 @@ Central bank stances must be updated manually after meetings/speeches.
 ### Via API:
 
 ```bash
-curl -X PATCH https://your-app-url/api/central-banks \
+curl -X PATCH https://your-app.vercel.app/api/central-banks \
   -H "x-api-secret: your_secret" \
   -H "Content-Type: application/json" \
   -d '{
