@@ -227,7 +227,7 @@ function CurrencyRow({
               </div>
               {score.cb_bias.key_phrase && (
                 <p className="text-[9px] text-slate-600 italic mt-1 leading-relaxed">
-                  "{score.cb_bias.key_phrase}"
+                  &quot;{score.cb_bias.key_phrase}&quot;
                 </p>
               )}
               {score.cb_bias.next_meeting_date && (

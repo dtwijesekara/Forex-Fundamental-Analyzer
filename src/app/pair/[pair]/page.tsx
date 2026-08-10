@@ -194,7 +194,7 @@ export default function PairDetailPage() {
                       </p>
                     )}
                     {cb.key_phrase && (
-                      <p className="text-[10px] text-slate-500 italic">"{cb.key_phrase}"</p>
+                      <p className="text-[10px] text-slate-500 italic">&quot;{cb.key_phrase}&quot;</p>
                     )}
                     {cb.notes && (
                       <p className="text-[10px] text-slate-600">{cb.notes}</p>

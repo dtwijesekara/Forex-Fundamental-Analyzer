@@ -159,7 +159,7 @@ function CBRow({ score }: { score: CurrencyScore }) {
       <div className="flex items-center gap-3 mt-1 pl-[72px] flex-wrap">
         {keyPhrase ? (
           <p className="text-[9px] text-slate-600 italic flex-1 min-w-0 truncate">
-            "{keyPhrase}"
+            &quot;{keyPhrase}&quot;
           </p>
         ) : (
           <span className="text-[9px] text-slate-700 flex-1">

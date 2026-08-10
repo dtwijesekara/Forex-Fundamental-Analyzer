@@ -1,8 +1,24 @@
 # FX Analyzer — Forex Fundamental Analysis Dashboard
 
+[![CI](https://github.com/dtwijesekara/Forex-Fundamental-Analyzer-/actions/workflows/ci.yml/badge.svg)](https://github.com/dtwijesekara/Forex-Fundamental-Analyzer-/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+
 A macro-fundamentals dashboard for forex traders: it scores 8 major currencies and 10 pairs on economic releases, central bank stance, rate outlook, intermarket signals, and positioning data — then serves the result as a live, auto-refreshing dashboard. No price charts, no signals to buy or sell — just the fundamental picture, computed on a schedule and read instantly.
 
 **Stack:** Next.js 15 (App Router) · TypeScript · Supabase (Postgres) · Tailwind CSS · Recharts, deployed on Vercel with a Railway-hosted scheduler.
+
+---
+
+## Screenshots
+
+<!--
+  TODO: replace with real screenshots once captured — e.g.:
+  ![Currency Board](./docs/screenshots/currency-board.png)
+  ![Pair Board](./docs/screenshots/pair-board.png)
+  Run `npm run dev`, open the dashboard, and drop image files in `docs/screenshots/`.
+-->
+
+*(Screenshots coming soon — run the app locally with `npm run dev` to see it live.)*
 
 ---
 
@@ -90,3 +106,7 @@ supabase/
 ## Disclaimer
 
 Built for personal use. It surfaces fundamental context to support manual trading decisions — it is not a signal service, does not execute trades, and is not financial advice.
+
+## License
+
+MIT — see [LICENSE](./LICENSE).

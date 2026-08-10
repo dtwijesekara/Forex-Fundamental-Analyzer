@@ -24,6 +24,8 @@ import {
 } from 'lucide-react';
 import type { PairBiasResult } from '@/types';
 
+const EMPTY_PAIRS: PairBiasResult[] = [];
+
 // ── Filter types ──────────────────────────────────────────────
 type FilterKey = 'all' | 'bullish' | 'bearish' | 'neutral' | 'high_conviction' | 'event_risk' | 'conflict';
 type SortKey = 'conviction' | 'score' | 'pair';
@@ -45,7 +47,7 @@ export default function PairsPage() {
   const [showSortMenu, setShowSortMenu] = useState(false);
   const isFirstLoad = useFirstLoad(!loading && !!data);
 
-  const rawPairs = data?.pairs ?? [];
+  const rawPairs = data?.pairs ?? EMPTY_PAIRS;
 
   // Sort first, then filter — hooks MUST be before any conditional return
   const sorted = useMemo(() => {
