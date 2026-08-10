@@ -11,14 +11,17 @@ A macro-fundamentals dashboard for forex traders: it scores 8 major currencies a
 
 ## Screenshots
 
-<!--
-  TODO: replace with real screenshots once captured — e.g.:
-  ![Currency Board](./docs/screenshots/currency-board.png)
-  ![Pair Board](./docs/screenshots/pair-board.png)
-  Run `npm run dev`, open the dashboard, and drop image files in `docs/screenshots/`.
--->
+| Overview | Currencies |
+|---|---|
+| ![Overview](./docs/screenshots/overview.png) | ![Currency Strength](./docs/screenshots/currencies.png) |
 
-*(Screenshots coming soon — run the app locally with `npm run dev` to see it live.)*
+| Pairs | Calendar |
+|---|---|
+| ![Pair Analysis](./docs/screenshots/pairs.png) | ![Economic Calendar](./docs/screenshots/calendar.png) |
+
+| Markets | Mobile |
+|---|---|
+| ![Market Overview](./docs/screenshots/markets.png) | <img src="./docs/screenshots/mobile.jpeg" width="280" alt="Mobile view" /> |
 
 ---
 
